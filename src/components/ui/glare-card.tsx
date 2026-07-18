@@ -4,16 +4,19 @@ export function GlareCard({
   children,
   className,
   onClick,
+  role,
 }: {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  role?: React.AriaRole;
 }) {
   const Comp = onClick ? 'button' : 'div';
   return (
     <Comp
       type={onClick ? 'button' : undefined}
       onClick={onClick}
+      role={role}
       className={cn(
         'group relative overflow-hidden rounded-2xl border border-[#e8e4de] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#c4a574]/50 hover:shadow-md',
         className,

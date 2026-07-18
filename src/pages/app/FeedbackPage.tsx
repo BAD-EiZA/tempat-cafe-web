@@ -11,12 +11,18 @@ export function FeedbackPage() {
   const branchId = useAppStore((s) => s.branchId);
   const [rows, setRows] = useState<any[]>([]);
   const [reply, setReply] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
-    if (!organizationId) return;
+    if (!organizationId) { setLoading(false); return; }
+    setLoading(true); setError('');
     const q = new URLSearchParams({ organizationId });
     if (branchId) q.set('branchId', branchId);
-    setRows(await api<any[]>(`/feedback?${q}`));
+    try { setRows(await api<any[]>(`/feedback?${q}`)); }
+    catch (e: any) { setError(e.message || 'Gagal memuat feedback.'); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -26,14 +32,19 @@ export function FeedbackPage() {
   async function respond(id: string) {
     const message = reply[id];
     if (!message) return;
-    await api(`/feedback/${id}/respond`, { method: 'POST', body: { message } });
-    setReply({ ...reply, [id]: '' });
-    await load();
+    setBusyId(id); setError('');
+    try {
+      await api(`/feedback/${id}/respond`, { method: 'POST', body: { message } });
+      setReply({ ...reply, [id]: '' }); await load();
+    } catch (e: any) { setError(e.message || 'Gagal mengirim balasan.'); }
+    finally { setBusyId(''); }
   }
 
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Feedback</h1>
+      {loading && <p className="mt-4 text-[var(--muted)]" role="status">Memuat feedback…</p>}
+      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
       <div className="mt-6 space-y-3">
         {rows.map((f) => (
           <div key={f.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm">
@@ -51,16 +62,17 @@ export function FeedbackPage() {
               <input
                 className="input"
                 placeholder="Balas…"
+                aria-label={`Balasan untuk feedback ${f.order?.orderNumber || f.id}`}
                 value={reply[f.id] || ''}
                 onChange={(e) => setReply({ ...reply, [f.id]: e.target.value })}
               />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white text-sm" onClick={() => respond(f.id)}>
-                Kirim
+              <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white text-sm" disabled={busyId === f.id || !reply[f.id]?.trim()} onClick={() => respond(f.id)}>
+                {busyId === f.id ? 'Mengirim…' : 'Kirim'}
               </button>
             </div>
           </div>
         ))}
-        {!rows.length && <p className="text-[var(--muted)]">Belum ada feedback.</p>}
+        {!loading && !rows.length && !error && <EmptyState title="Belum ada feedback." />}
       </div>
     </div>
   );

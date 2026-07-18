@@ -1,7 +1,4 @@
 import { useEffect, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
-import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
 
@@ -19,6 +16,23 @@ const SECTION_TYPES = [
   'social',
 ];
 
+const DEFAULT_DESIGN = {
+  primaryColor: '#1a1a1a',
+  secondaryColor: '#c4a574',
+  font: 'Inter',
+};
+
+const DEFAULT_SECTIONS = [
+  { type: 'hero', content: { title: '', subtitle: '', imageUrl: '' } },
+  { type: 'about', content: { body: '' } },
+  { type: 'hours', content: { text: 'Sen-Min 08:00-22:00' } },
+  { type: 'location', content: { address: '', mapsUrl: '' } },
+  { type: 'facilities', content: { items: 'WiFi, AC, Outdoor' } },
+  { type: 'gallery', content: { urls: '' } },
+  { type: 'cta', content: { menuLabel: 'Lihat Menu', reservationLabel: 'Reservasi' } },
+  { type: 'social', content: { instagram: '', whatsapp: '' } },
+];
+
 export function HomepageBuilderPage() {
   const api = useApi();
   const organizationId = useAppStore((s) => s.organizationId);
@@ -26,84 +40,152 @@ export function HomepageBuilderPage() {
   const [slug, setSlug] = useState('');
   const [title, setTitle] = useState('');
   const [selected, setSelected] = useState('');
-  const [design, setDesign] = useState({
-    primaryColor: '#1a1a1a',
-    secondaryColor: '#c4a574',
-    font: 'Inter',
-  });
+  const [design, setDesign] = useState(DEFAULT_DESIGN);
   const [seo, setSeo] = useState({ title: '', description: '' });
-  const [sections, setSections] = useState<any[]>([
-    { type: 'hero', content: { title: '', subtitle: '', imageUrl: '' } },
-    { type: 'about', content: { body: '' } },
-    { type: 'hours', content: { text: 'Sen–Min 08:00–22:00' } },
-    { type: 'location', content: { address: '', mapsUrl: '' } },
-    { type: 'facilities', content: { items: 'WiFi, AC, Outdoor' } },
-    { type: 'gallery', content: { urls: '' } },
-    { type: 'cta', content: { menuLabel: 'Lihat Menu', reservationLabel: 'Reservasi' } },
-    { type: 'social', content: { instagram: '', whatsapp: '' } },
-  ]);
+  const [sections, setSections] = useState<any[]>(DEFAULT_SECTIONS);
   const [uploadMsg, setUploadMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [previewMobile, setPreviewMobile] = useState(false);
 
   async function load() {
     if (!organizationId) return;
-    const list = await api<any[]>(`/homepage?organizationId=${organizationId}`);
-    setPages(list);
-    if (list[0] && !selected) setSelected(list[0].id);
+    setLoading(true);
+    try {
+      const list = await api<any[]>(`/homepage?organizationId=${organizationId}`);
+      setPages(list);
+      setSelected((current) => (list.some((page) => page.id === current) ? current : list[0]?.id || ''));
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Gagal memuat homepage.' });
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load().catch(() => undefined);
+    load();
   }, [api, organizationId]);
+
+  useEffect(() => {
+    const page = pages.find((item) => item.id === selected);
+    if (!page) return;
+    const version = page.versions?.[0];
+    const savedDesign = version?.design || {};
+    setDesign({ ...DEFAULT_DESIGN, ...savedDesign });
+    setSeo({
+      title: page.seoTitle || savedDesign.seo?.title || '',
+      description: page.seoDescription || savedDesign.seo?.description || '',
+    });
+    setSections(version?.sections?.length ? version.sections : DEFAULT_SECTIONS);
+    setDirty(false);
+    setMessage(null);
+  }, [pages, selected]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  function edit(action: () => void) {
+    action();
+    setDirty(true);
+    setMessage(null);
+  }
 
   async function createPage(e: React.FormEvent) {
     e.preventDefault();
-    await api('/homepage', {
-      method: 'POST',
-      body: { organizationId, slug, title },
-    });
-    setSlug('');
-    setTitle('');
-    await load();
+    setBusy('create');
+    setMessage(null);
+    try {
+      const created = await api<any>('/homepage', {
+        method: 'POST',
+        body: { organizationId, slug, title },
+      });
+      setSlug('');
+      setTitle('');
+      setSelected(created.id);
+      await load();
+      setMessage({ type: 'success', text: 'Halaman dibuat.' });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Gagal membuat halaman.' });
+    } finally {
+      setBusy('');
+    }
   }
 
-  async function saveDraft() {
-    if (!selected) return;
-    await api(`/homepage/${selected}/draft`, {
+  async function saveDraft(showSuccess = true) {
+    if (!selected) return false;
+    setBusy('save');
+    setMessage(null);
+    try {
+      await api(`/homepage/${selected}/draft`, {
       method: 'POST',
       body: {
-        design: { ...design, seo },
+        design,
+        seo,
         sections: sections.map((s) => ({
           type: s.type,
           content: s.content,
           visible: s.visible !== false,
         })),
       },
-    });
-    await load();
+      });
+      setDirty(false);
+      await load();
+      if (showSuccess) setMessage({ type: 'success', text: 'Draft tersimpan.' });
+      return true;
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Gagal menyimpan draft.' });
+      return false;
+    } finally {
+      setBusy('');
+    }
   }
 
   async function publish() {
     if (!selected) return;
-    await api(`/homepage/${selected}/publish`, { method: 'POST' });
-    await load();
+    if (dirty && !(await saveDraft(false))) return;
+    setBusy('publish');
+    setMessage(null);
+    try {
+      await api(`/homepage/${selected}/publish`, { method: 'POST' });
+      await load();
+      setMessage({ type: 'success', text: 'Homepage dipublikasikan.' });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Gagal publish.' });
+    } finally {
+      setBusy('');
+    }
   }
 
   function updateSection(i: number, content: any) {
-    setSections((prev) => prev.map((s, idx) => (idx === i ? { ...s, content } : s)));
+    edit(() => setSections((prev) => prev.map((s, idx) => (idx === i ? { ...s, content } : s))));
   }
 
   function addSection(type: string) {
-    setSections((prev) => [...prev, { type, content: {} }]);
+    edit(() => setSections((prev) => [...prev, { type, content: {} }]));
   }
 
   function moveSection(i: number, dir: -1 | 1) {
-    setSections((prev) => {
+    edit(() => setSections((prev) => {
       const j = i + dir;
       if (j < 0 || j >= prev.length) return prev;
       const next = [...prev];
       [next[i], next[j]] = [next[j], next[i]];
       return next;
-    });
+    }));
+  }
+
+  function selectPage(id: string) {
+    if (dirty && !window.confirm('Perubahan belum disimpan. Ganti halaman dan buang perubahan?')) return;
+    setSelected(id);
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>, sectionIndex?: number) {
@@ -154,6 +236,11 @@ export function HomepageBuilderPage() {
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Homepage builder</h1>
       {!organizationId && <p className="mt-4 text-[var(--muted)]">Pilih tenant di dashboard dulu.</p>}
+      {message && (
+        <p role="status" className={`mt-4 rounded-xl border px-4 py-3 text-sm ${message.type === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}>
+          {message.text}
+        </p>
+      )}
 
       <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-6 max-w-md space-y-2" onSubmit={createPage}>
         <h2 className="font-semibold">Halaman baru</h2>
@@ -170,14 +257,14 @@ export function HomepageBuilderPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="submit" disabled={!organizationId}>
-          Buat
+        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" type="submit" disabled={!organizationId || !!busy}>
+          {busy === 'create' ? 'Membuat...' : 'Buat'}
         </button>
       </form>
 
       <div className="mt-6 max-w-md">
         <label className="label">Pilih halaman</label>
-        <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
+        <select className="input" value={selected} onChange={(e) => selectPage(e.target.value)} disabled={loading || !!busy}>
           <option value="">—</option>
           {pages.map((p) => (
             <option key={p.id} value={p.id}>
@@ -185,6 +272,7 @@ export function HomepageBuilderPage() {
             </option>
           ))}
         </select>
+        {loading && <p className="mt-2 text-sm text-[var(--muted)]">Memuat homepage...</p>}
       </div>
 
       <div className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-4 max-w-xl space-y-2">
@@ -194,26 +282,26 @@ export function HomepageBuilderPage() {
             className="input"
             type="color"
             value={design.primaryColor}
-            onChange={(e) => setDesign({ ...design, primaryColor: e.target.value })}
+            onChange={(e) => edit(() => setDesign({ ...design, primaryColor: e.target.value }))}
           />
           <input
             className="input"
             type="color"
             value={design.secondaryColor}
-            onChange={(e) => setDesign({ ...design, secondaryColor: e.target.value })}
+            onChange={(e) => edit(() => setDesign({ ...design, secondaryColor: e.target.value }))}
           />
         </div>
         <input
           className="input"
           placeholder="SEO title"
           value={seo.title}
-          onChange={(e) => setSeo({ ...seo, title: e.target.value })}
+          onChange={(e) => edit(() => setSeo({ ...seo, title: e.target.value }))}
         />
         <input
           className="input"
           placeholder="SEO description"
           value={seo.description}
-          onChange={(e) => setSeo({ ...seo, description: e.target.value })}
+          onChange={(e) => edit(() => setSeo({ ...seo, description: e.target.value }))}
         />
       </div>
 
@@ -252,7 +340,7 @@ export function HomepageBuilderPage() {
                 <button
                   type="button"
                   className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold !py-1 text-xs"
-                  onClick={() => setSections((prev) => prev.filter((_, j) => j !== i))}
+                  onClick={() => edit(() => setSections((prev) => prev.filter((_, j) => j !== i)))}
                 >
                   Hapus
                 </button>
@@ -376,11 +464,11 @@ export function HomepageBuilderPage() {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a]" type="button" onClick={saveDraft} disabled={!selected}>
-          Simpan draft
+        <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="button" onClick={() => void saveDraft()} disabled={!selected || !!busy}>
+          {busy === 'save' ? 'Menyimpan...' : dirty ? 'Simpan draft *' : 'Simpan draft'}
         </button>
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" onClick={publish} disabled={!selected}>
-          Publish
+        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" type="button" onClick={publish} disabled={!selected || !!busy}>
+          {busy === 'publish' ? 'Publishing...' : 'Publish'}
         </button>
         <label className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold cursor-pointer">
           Upload media
@@ -396,6 +484,35 @@ export function HomepageBuilderPage() {
             /c/{pages.find((p) => p.id === selected)?.slug}
           </a>
         </p>
+      )}
+
+      {selected && (
+        <section className="mt-6 max-w-3xl" aria-label="Preview draft">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-semibold">Preview draft</h2>
+            <button type="button" className="rounded-lg border border-[#d4d0c8] px-3 py-1 text-xs font-semibold" onClick={() => setPreviewMobile((value) => !value)}>
+              {previewMobile ? 'Desktop' : 'Mobile'}
+            </button>
+          </div>
+          <div className={`mx-auto overflow-hidden rounded-2xl border border-[#d4d0c8] bg-[#f8f6f2] shadow-sm ${previewMobile ? 'max-w-[390px]' : 'max-w-full'}`} style={{ fontFamily: design.font, color: design.primaryColor }}>
+            <div className="border-b bg-white px-4 py-3 text-sm font-bold">
+              {pages.find((page) => page.id === selected)?.title || 'Homepage'}
+            </div>
+            <div className="space-y-3 p-3">
+              {sections.filter((section) => section.visible !== false).map((section, index) => {
+                const content = section.content || {};
+                if (section.type === 'hero') return (
+                  <div key={index} className="rounded-xl bg-white bg-cover bg-center p-6" style={content.imageUrl ? { backgroundImage: `linear-gradient(#0008,#0008),url(${content.imageUrl})`, color: '#fff' } : undefined}>
+                    <h3 className="text-xl font-bold">{content.title || 'Hero title'}</h3>
+                    <p className="text-sm opacity-80">{content.subtitle}</p>
+                  </div>
+                );
+                const text = content.body || content.text || content.address || content.quote || content.items;
+                return <div key={index} className="rounded-xl bg-white p-4"><strong className="capitalize">{section.type.replace('_', ' ')}</strong>{text && <p className="mt-1 whitespace-pre-wrap text-sm opacity-70">{text}</p>}</div>;
+              })}
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

@@ -2,12 +2,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type CartLine = {
+  lineId?: string;
   menuItemId: string;
   name: string;
   unitPrice: number;
   quantity: number;
   notes?: string;
-  modifiers?: { name: string; priceDelta: number }[];
+  modifiers?: { modifierId: string; name: string; priceDelta: number }[];
 };
 
 type AppState = {
@@ -21,7 +22,16 @@ type AppState = {
   addToCart: (line: CartLine) => void;
   updateQty: (menuItemId: string, quantity: number) => void;
   clearCart: () => void;
+  reset: () => void;
 };
+
+function lineId(line: CartLine) {
+  const modifiers = (line.modifiers || [])
+    .map((modifier) => modifier.modifierId)
+    .sort()
+    .join(',');
+  return `${line.menuItemId}:${modifiers}`;
+}
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -31,28 +41,49 @@ export const useAppStore = create<AppState>()(
       tableSessionId: null,
       tableId: null,
       cart: [],
-      setTenant: (organizationId, branchId) => set({ organizationId, branchId }),
+      setTenant: (organizationId, branchId) =>
+        set((state) => {
+          if (state.branchId && state.branchId !== branchId) {
+            localStorage.removeItem('pos_shift');
+            return {
+              organizationId,
+              branchId,
+              tableSessionId: null,
+              tableId: null,
+              cart: [],
+            };
+          }
+          return { organizationId, branchId };
+        }),
       setSession: (tableSessionId, tableId) => set({ tableSessionId, tableId }),
       addToCart: (line) =>
         set((s) => {
-          const idx = s.cart.findIndex(
-            (c) => c.menuItemId === line.menuItemId && JSON.stringify(c.modifiers) === JSON.stringify(line.modifiers),
-          );
+          const id = line.lineId || lineId(line);
+          const idx = s.cart.findIndex((c) => (c.lineId || lineId(c)) === id);
           if (idx >= 0) {
             const cart = [...s.cart];
-            cart[idx] = { ...cart[idx], quantity: cart[idx].quantity + line.quantity };
+            cart[idx] = { ...cart[idx], lineId: id, quantity: cart[idx].quantity + line.quantity };
             return { cart };
           }
-          return { cart: [...s.cart, line] };
+          return { cart: [...s.cart, { ...line, lineId: id }] };
         }),
-      updateQty: (menuItemId, quantity) =>
-        set((s) => ({
-          cart:
-            quantity <= 0
-              ? s.cart.filter((c) => c.menuItemId !== menuItemId)
-              : s.cart.map((c) => (c.menuItemId === menuItemId ? { ...c, quantity } : c)),
-        })),
+      updateQty: (id, quantity) =>
+        set((s) => {
+          const byLine = s.cart.some((c) => (c.lineId || lineId(c)) === id);
+          const matches = (c: CartLine) =>
+            byLine ? (c.lineId || lineId(c)) === id : c.menuItemId === id;
+          return {
+            cart:
+              quantity <= 0
+                ? s.cart.filter((c) => !matches(c))
+                : s.cart.map((c) => (matches(c) ? { ...c, quantity } : c)),
+          };
+        }),
       clearCart: () => set({ cart: [] }),
+      reset: () => {
+        localStorage.removeItem('pos_shift');
+        set({ organizationId: null, branchId: null, tableSessionId: null, tableId: null, cart: [] });
+      },
     }),
     { name: 'cafe-app' },
   ),

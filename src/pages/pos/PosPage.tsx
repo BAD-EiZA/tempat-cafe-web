@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '@/hooks/useApi';
 import { useRealtime } from '@/hooks/useRealtime';
@@ -14,6 +14,7 @@ import { AnimatedModal } from '@/components/ui/animated-modal';
 import { AceBadge } from '@/components/ace/PageShell';
 import { MovingBorderButton } from '@/components/ui/moving-border';
 import { isMockSnap, loadSnap } from '@/lib/snap';
+import { ActionError, ConnectionStatus, statusLabel } from '@/components/ace/OpsFeedback';
 
 export function PosPage() {
   const api = useApi();
@@ -37,6 +38,10 @@ export function PosPage() {
   const [actualCash, setActualCash] = useState(0);
   const [voidModal, setVoidModal] = useState<{ orderId: string; itemId: string } | null>(null);
   const [voidReason, setVoidReason] = useState('void');
+  const [submitting, setSubmitting] = useState(false);
+  const [busyAction, setBusyAction] = useState('');
+  const [actionError, setActionError] = useState('');
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (branchId) return;
@@ -96,30 +101,52 @@ export function PosPage() {
   }
 
   async function openShift() {
-    if (!branchId) return;
-    const s = await api<any>('/pos/shifts/open', {
-      method: 'POST',
-      body: { branchId, openingCash: Number(openingCash) || 0 },
-    });
-    setShiftId(s.id);
-    localStorage.setItem('pos_shift', s.id);
-    setMsg('Shift dibuka');
+    if (!branchId || busyAction) return;
+    setBusyAction('open-shift');
+    setActionError('');
+    try {
+      const s = await api<any>('/pos/shifts/open', {
+        method: 'POST',
+        body: { branchId, openingCash: Number(openingCash) || 0 },
+      });
+      setShiftId(s.id);
+      localStorage.setItem('pos_shift', s.id);
+      setMsg('Shift dibuka');
+    } catch (e: any) {
+      setActionError(e.message || 'Shift gagal dibuka');
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function confirmCloseShift() {
-    if (!shiftId) return;
-    await api(`/pos/shifts/${shiftId}/close`, {
-      method: 'POST',
-      body: { actualCash: Number(actualCash) || 0 },
-    });
-    localStorage.removeItem('pos_shift');
-    setShiftId(null);
-    setCloseOpen(false);
-    setMsg('Shift ditutup');
+    if (!shiftId || busyAction) return;
+    setBusyAction('close-shift');
+    setActionError('');
+    try {
+      await api(`/pos/shifts/${shiftId}/close`, {
+        method: 'POST',
+        body: { actualCash: Number(actualCash) || 0 },
+      });
+      localStorage.removeItem('pos_shift');
+      setShiftId(null);
+      setCloseOpen(false);
+      setMsg('Shift ditutup');
+    } catch (e: any) {
+      setActionError(e.message || 'Shift gagal ditutup');
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function submitOrder() {
-    if (!branchId || !cart.length) return;
+    if (!shiftId) {
+      setMsg('Buka shift sebelum membuat order');
+      return;
+    }
+    if (!branchId || !cart.length || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     setMsg('');
     try {
       const order = await api<any>('/pos/orders', {
@@ -171,12 +198,24 @@ export function PosPage() {
       await refresh();
     } catch (e: any) {
       setMsg(e.message || 'Gagal');
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
   async function setStatus(id: string, status: string) {
-    await api(`/orders/${id}/status`, { method: 'PATCH', body: { status } });
-    await refresh();
+    if (busyAction) return;
+    setBusyAction(`status:${id}`);
+    setActionError('');
+    try {
+      await api(`/orders/${id}/status`, { method: 'PATCH', body: { status } });
+      await refresh();
+    } catch (e: any) {
+      setActionError(e.message || 'Status order gagal diubah');
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function openDetail(id: string) {
@@ -184,15 +223,23 @@ export function PosPage() {
   }
 
   async function confirmVoid() {
-    if (!voidModal) return;
-    await api(`/orders/${voidModal.orderId}/void-item`, {
-      method: 'POST',
-      body: { orderItemId: voidModal.itemId, reason: voidReason || 'void' },
-    });
-    setVoidModal(null);
-    setMsg('Item void');
-    await openDetail(voidModal.orderId);
-    await refresh();
+    if (!voidModal || busyAction) return;
+    setBusyAction('void');
+    setActionError('');
+    try {
+      await api(`/orders/${voidModal.orderId}/void-item`, {
+        method: 'POST',
+        body: { orderItemId: voidModal.itemId, reason: voidReason || 'void' },
+      });
+      setVoidModal(null);
+      setMsg('Item dibatalkan');
+      await openDetail(voidModal.orderId);
+      await refresh();
+    } catch (e: any) {
+      setActionError(e.message || 'Item gagal dibatalkan');
+    } finally {
+      setBusyAction('');
+    }
   }
 
   async function transferTable(orderId: string, tableId: string) {
@@ -232,14 +279,8 @@ export function PosPage() {
               </AceButton>
             </div>
           </div>
-          {offline && (
-            <p className="mb-2 rounded-xl bg-amber-500/20 px-3 py-2 text-sm text-amber-100">
-              Koneksi gagal — reconnect…
-            </p>
-          )}
-          <p className="mb-2 text-xs text-white/50">
-            {lastSync ? `Sync ${lastSync.toLocaleTimeString('id-ID')}` : '—'} · SSE {connected ? 'on' : 'off'}
-          </p>
+          <ConnectionStatus connected={connected} lastSync={lastSync} error={offline ? 'Data POS gagal dimuat' : ''} onRetry={() => refresh()} />
+          <ActionError message={actionError} />
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {(menu?.menus || []).flatMap((m: any) =>
               (m.categories || []).flatMap((c: any) =>
@@ -305,8 +346,8 @@ export function PosPage() {
                   value={openingCash || ''}
                   onChange={(e) => setOpeningCash(Number(e.target.value))}
                 />
-                <AceButton variant="accent" className="w-full" onClick={openShift} disabled={!branchId}>
-                  Buka shift
+                <AceButton variant="accent" className="w-full" onClick={openShift} disabled={!branchId || !!busyAction}>
+                  {busyAction === 'open-shift' ? 'Membuka...' : 'Buka shift'}
                 </AceButton>
               </>
             ) : (
@@ -354,10 +395,10 @@ export function PosPage() {
           <MovingBorderButton
             className="mt-3 w-full"
             containerClassName="mt-3 w-full"
-            disabled={!cart.length}
+            disabled={!cart.length || !shiftId || submitting}
             onClick={submitOrder}
           >
-            Buat order
+            {submitting ? 'Memproses…' : shiftId ? 'Buat order' : 'Buka shift untuk order'}
           </MovingBorderButton>
           {msg && <p className="mt-2 text-sm text-white/50">{msg}</p>}
 
@@ -367,35 +408,35 @@ export function PosPage() {
               <AceCard key={o.id} className="text-sm !border-white/10 !bg-white/5 !text-white">
                 <div className="flex justify-between">
                   <span className="font-bold">{o.orderNumber}</span>
-                  <AceBadge tone="info">{o.status}</AceBadge>
+                   <AceBadge tone="info">{statusLabel(o.status)}</AceBadge>
                 </div>
                 <p className="text-white/50">{formatIdr(o.grandTotal ?? o.total ?? 0)}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {o.status === 'NEW' && (
-                    <AceButton variant="ghost" className="!border-white/20 !py-1 !text-xs !text-white" onClick={() => setStatus(o.id, 'ACCEPTED')}>
-                      Accept
+                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'ACCEPTED')}>
+                      Terima
                     </AceButton>
                   )}
                   {['NEW', 'ACCEPTED'].includes(o.status) && (
-                    <AceButton variant="ghost" className="!border-white/20 !py-1 !text-xs !text-white" onClick={() => setStatus(o.id, 'PREPARING')}>
-                      Prep
+                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'PREPARING')}>
+                      Siapkan
                     </AceButton>
                   )}
                   {o.status === 'PREPARING' && (
-                    <AceButton variant="ghost" className="!border-white/20 !py-1 !text-xs !text-white" onClick={() => setStatus(o.id, 'READY')}>
-                      Ready
+                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'READY')}>
+                      Siap
                     </AceButton>
                   )}
                   {o.status === 'READY' && (
-                    <AceButton variant="primary" className="!py-1 !text-xs" onClick={() => setStatus(o.id, 'COMPLETED')}>
-                      Done
+                    <AceButton variant="primary" className="!text-xs" disabled={!!busyAction} onClick={() => window.confirm('Selesaikan order ini?') && setStatus(o.id, 'COMPLETED')}>
+                      Selesai
                     </AceButton>
                   )}
-                  <AceButton variant="ghost" className="!border-white/20 !py-1 !text-xs !text-white" onClick={() => openDetail(o.id)}>
+                  <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" onClick={() => openDetail(o.id)}>
                     Detail
                   </AceButton>
-                  <AceButton variant="ghost" className="!border-white/20 !py-1 !text-xs !text-white" onClick={() => reprint(o.id)}>
-                    Reprint
+                  <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" onClick={() => reprint(o.id)}>
+                    Cetak ulang
                   </AceButton>
                 </div>
               </AceCard>
@@ -422,7 +463,7 @@ export function PosPage() {
                       className="!border-white/20 !py-0.5 !text-xs !text-white"
                       onClick={() => setVoidModal({ orderId: detail.id, itemId: i.id })}
                     >
-                      Void
+                      Batalkan
                     </AceButton>
                   )}
                 </div>
@@ -465,11 +506,11 @@ export function PosPage() {
         </div>
       </AnimatedModal>
 
-      <AnimatedModal open={!!voidModal} onClose={() => setVoidModal(null)} title="Void item">
+      <AnimatedModal open={!!voidModal} onClose={() => setVoidModal(null)} title="Batalkan item">
         <AceInput label="Alasan" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
         <div className="mt-4 flex gap-2">
-          <AceButton variant="danger" onClick={confirmVoid}>
-            Void
+          <AceButton variant="danger" disabled={!!busyAction} onClick={confirmVoid}>
+            {busyAction === 'void' ? 'Memproses...' : 'Batalkan item'}
           </AceButton>
           <AceButton variant="ghost" onClick={() => setVoidModal(null)}>
             Batal

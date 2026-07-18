@@ -10,7 +10,7 @@ import { Loader } from '@/components/ui/loader';
 import { AnimatedModal } from '@/components/ui/animated-modal';
 import { MovingBorderButton } from '@/components/ui/moving-border';
 
-type ModSel = { name: string; priceDelta: number };
+type ModSel = { modifierId: string; name: string; priceDelta: number };
 
 export function PublicMenuPage() {
   const { cafeSlug } = useParams();
@@ -22,17 +22,23 @@ export function PublicMenuPage() {
   const [pick, setPick] = useState<any | null>(null);
   const [selected, setSelected] = useState<Record<string, ModSel>>({});
   const [notes, setNotes] = useState('');
+  const [err, setErr] = useState('');
+  const [pickErr, setPickErr] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!cafeSlug) return;
-    api<any>(`/public/cafes/${cafeSlug}/menu`).then((res) => {
-      setData(res);
-      if (res.branch) {
-        const orgId = res.branch.organizationId || res.branch.brand?.organizationId || '';
-        setTenant(orgId, res.branch.id);
-      }
-    });
-  }, [cafeSlug, setTenant]);
+    setErr('');
+    api<any>(`/public/cafes/${cafeSlug}/menu`)
+      .then((res) => {
+        setData(res);
+        if (res.branch) {
+          const orgId = res.branch.organizationId || res.branch.brand?.organizationId || '';
+          setTenant(orgId, res.branch.id);
+        }
+      })
+      .catch((e) => setErr(e.message || 'Menu gagal dimuat'));
+  }, [cafeSlug, setTenant, retry]);
 
   const total = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
   const count = cart.reduce((s, c) => s + c.quantity, 0);
@@ -56,6 +62,7 @@ export function PublicMenuPage() {
     setPick(item);
     setSelected({});
     setNotes('');
+    setPickErr('');
   }
 
   function toggleMod(groupId: string, mod: any, multi: boolean) {
@@ -71,15 +78,22 @@ export function PublicMenuPage() {
         Object.keys(next).forEach((k) => {
           if (k === groupId || k.startsWith(`${groupId}:`)) delete next[k];
         });
-        next[groupId] = { name: mod.name, priceDelta: mod.priceDelta || 0 };
+        next[groupId] = { modifierId: mod.id, name: mod.name, priceDelta: mod.priceDelta || 0 };
         return next;
       }
-      return { ...prev, [key]: { name: mod.name, priceDelta: mod.priceDelta || 0 } };
+      return { ...prev, [key]: { modifierId: mod.id, name: mod.name, priceDelta: mod.priceDelta || 0 } };
     });
   }
 
   function confirmPick() {
     if (!pick) return;
+    const missing = (pick.modifierGroups || []).find((g: any) =>
+      g.required && !Object.keys(selected).some((key) => key === g.id || key.startsWith(`${g.id}:`)),
+    );
+    if (missing) {
+      setPickErr(`Pilih opsi ${missing.name}`);
+      return;
+    }
     const modifiers = Object.values(selected);
     const unitPrice = pick.price + modifiers.reduce((s, m) => s + m.priceDelta, 0);
     addToCart({
@@ -93,10 +107,25 @@ export function PublicMenuPage() {
     setPick(null);
   }
 
+  if (err) {
+    return (
+      <PageShell maxWidth="max-w-lg">
+        <AceCard className="mt-10 text-center" role="alert">
+          <h1 className="font-semibold">Menu tidak dapat dimuat</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
+            <AceButton as={Link} to={`/c/${cafeSlug}`} variant="ghost">Kembali ke kafe</AceButton>
+          </div>
+        </AceCard>
+      </PageShell>
+    );
+  }
+
   if (!data) {
     return (
       <PageShell maxWidth="max-w-lg">
-        <Loader />
+        <Loader label="Memuat menu…" />
       </PageShell>
     );
   }
@@ -104,6 +133,7 @@ export function PublicMenuPage() {
   return (
     <PageShell beams maxWidth="max-w-lg" className="pb-28">
       <header className="sticky top-0 z-20 -mx-4 border-b border-[#e8e4de] bg-[#faf8f5]/90 px-4 py-4 backdrop-blur">
+        <Link to={`/c/${cafeSlug}`} className="inline-flex min-h-11 items-center text-sm underline">← Kembali ke kafe</Link>
         <p className="text-sm text-[#6b6b6b]">{data.branch?.brand?.name}</p>
         <h1 className="text-xl font-bold">{data.branch?.name || 'Menu'}</h1>
       </header>
@@ -131,22 +161,24 @@ export function PublicMenuPage() {
                         <div className="flex items-center gap-2">
                           <AceButton
                             variant="ghost"
-                            className="!px-2 !py-1"
+                            className="!h-11 !w-11 !px-0 !py-0"
+                            aria-label={`Kurangi ${item.name}`}
                             onClick={() => updateQty(item.id, inCart.quantity - 1)}
                           >
                             −
                           </AceButton>
-                          <span className="w-6 text-center text-sm font-bold">{inCart.quantity}</span>
+                          <span className="w-6 text-center text-sm font-bold" aria-live="polite">{inCart.quantity}</span>
                           <AceButton
                             variant="ghost"
-                            className="!px-2 !py-1"
+                            className="!h-11 !w-11 !px-0 !py-0"
+                            aria-label={`Tambah ${item.name}`}
                             onClick={() => updateQty(item.id, inCart.quantity + 1)}
                           >
                             +
                           </AceButton>
                         </div>
                       ) : (
-                        <AceButton variant="primary" className="!px-3 !py-2 text-sm" onClick={() => openItem(item)}>
+                        <AceButton variant="primary" className="!h-11 !w-11 !px-0 !py-0 text-sm" aria-label={`Tambah ${item.name}`} onClick={() => openItem(item)}>
                           +
                         </AceButton>
                       )}
@@ -158,6 +190,14 @@ export function PublicMenuPage() {
           )),
         )}
       </div>
+      {!(data.menus || []).some((menu: any) =>
+        (menu.categories || []).some((cat: any) => (cat.items || []).length),
+      ) && (
+        <AceCard className="mt-6 text-center" role="status">
+          <p className="font-semibold">Menu belum tersedia</p>
+          <p className="mt-1 text-sm text-[#6b6b6b]">Silakan kembali lagi nanti.</p>
+        </AceCard>
+      )}
 
       {count > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e8e4de] bg-white/95 p-4 backdrop-blur">
@@ -191,8 +231,9 @@ export function PublicMenuPage() {
                           key={m.id}
                           type="button"
                           variant={on ? 'primary' : 'ghost'}
-                          className="!text-xs"
-                          onClick={() => toggleMod(g.id, m, multi)}
+                           className="!text-xs"
+                           onClick={() => toggleMod(g.id, m, multi)}
+                           aria-pressed={on}
                         >
                           {m.name}
                           {m.priceDelta ? ` (+${formatIdr(m.priceDelta)})` : ''}
@@ -203,12 +244,9 @@ export function PublicMenuPage() {
                 </AceCard>
               );
             })}
-            <input
-              className="w-full rounded-xl border border-[#d4d0c8] px-3 py-2 text-sm"
-              placeholder="Catatan item"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+            <label className="block text-sm font-semibold" htmlFor="item-notes">Catatan item</label>
+            <input id="item-notes" className="min-h-11 w-full rounded-xl border border-[#d4d0c8] px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            {pickErr && <p role="alert" className="text-sm text-[var(--danger)]">{pickErr}</p>}
             <AceButton variant="accent" className="w-full" onClick={confirmPick}>
               Tambah · {formatIdr(pick.price + modExtra)}
             </AceButton>

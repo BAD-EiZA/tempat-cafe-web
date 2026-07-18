@@ -1,0 +1,1 @@
+import{u as e,d as n,r as i}from"./index-N9W84NMm.js";import{a as u}from"./api-DyHdGdfq.js";function I(){const{getAccessToken:a}=e(),r=n(o=>o.organizationId),t=n(o=>o.branchId);return i.useCallback(async(o,s={})=>{const c=await a();return u(o,{...s,token:c,orgId:r||void 0,branchId:t||void 0})},[a,r,t])}export{I as u};

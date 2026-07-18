@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { BackgroundBeams, BackgroundBeamsDark } from '@/components/ui/background-beams';
 import { Spotlight } from '@/components/ui/spotlight';
+import { BrandFooter } from '@/components/ace/BrandFooter';
 
 export function PageShell({
   children,
@@ -21,14 +22,15 @@ export function PageShell({
   return (
     <div
       className={cn(
-        'relative min-h-screen',
+        'relative flex min-h-screen flex-col',
         dark ? 'bg-[#0c0c0c] text-white' : 'bg-[#faf8f5] text-[#1a1a1a]',
         className,
       )}
     >
       {variant !== 'plain' && beams && (dark ? <BackgroundBeamsDark /> : <BackgroundBeams />)}
       {spotlight && !dark && <Spotlight />}
-      <div className={cn('relative z-10 mx-auto w-full px-4 py-6', maxWidth)}>{children}</div>
+      <div className={cn('relative z-10 mx-auto w-full flex-1 px-4 py-6', maxWidth)}>{children}</div>
+      <BrandFooter dark={dark} />
     </div>
   );
 }

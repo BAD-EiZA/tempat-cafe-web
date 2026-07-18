@@ -11,6 +11,7 @@ import { Timeline } from '@/components/ui/timeline';
 import { GlareCard } from '@/components/ui/glare-card';
 import { FloatingNavbar } from '@/components/ui/floating-navbar';
 import { MovingBorderButton } from '@/components/ui/moving-border';
+import { Loader } from '@/components/ui/loader';
 
 export function MemberPage() {
   const api = useApi();
@@ -19,22 +20,32 @@ export function MemberPage() {
   const [profile, setProfile] = useState<any>(null);
   const [err, setErr] = useState('');
   const [lookup, setLookup] = useState<any>(null);
+  const [loyaltyErr, setLoyaltyErr] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    setErr('');
+    setProfile(null);
     api('/customers/me', { method: 'POST' })
       .then(async (c: any) => {
         const full = await api<any>(`/customers/${c.id}`).catch(() => c);
         setProfile(full);
       })
       .catch((e) => setErr(e.message));
-  }, [api, isAuthenticated]);
+  }, [api, isAuthenticated, retry]);
 
   useEffect(() => {
     if (!organizationId || !profile?.id) return;
     api<any>(`/loyalty/lookup?organizationId=${organizationId}&customerId=${profile.id}`)
-      .then(setLookup)
-      .catch(() => setLookup(null));
+      .then((value) => {
+        setLookup(value);
+        setLoyaltyErr('');
+      })
+      .catch(() => {
+        setLookup(null);
+        setLoyaltyErr('Saldo poin tidak dapat diperbarui.');
+      });
   }, [api, organizationId, profile?.id]);
 
   if (!isAuthenticated) {
@@ -49,6 +60,29 @@ export function MemberPage() {
           <AceButton variant="ghost" className="mt-2 w-full" onClick={() => devLogin('owner')}>
             Dev login
           </AceButton>
+        </AceCard>
+      </PageShell>
+    );
+  }
+
+  if (!profile && !err) {
+    return (
+      <PageShell beams maxWidth="max-w-md">
+        <Loader className="pt-20" label="Memuat profil member…" />
+      </PageShell>
+    );
+  }
+
+  if (err && !profile) {
+    return (
+      <PageShell beams maxWidth="max-w-md">
+        <AceCard className="mt-20 text-center" role="alert">
+          <h1 className="font-semibold">Profil tidak dapat dimuat</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
+            <AceButton as={Link} to="/" variant="ghost">Beranda</AceButton>
+          </div>
         </AceCard>
       </PageShell>
     );
@@ -77,7 +111,7 @@ export function MemberPage() {
           <p className="text-sm text-[#6b6b6b]">{profile?.email || user?.email}</p>
           <p className="text-sm text-[#6b6b6b]">{profile?.phone}</p>
         </GlareCard>
-        {err && <p className="text-sm text-[var(--danger)]">{err}</p>}
+        {err && <p role="alert" className="text-sm text-[var(--danger)]">{err}</p>}
 
         {memberships.length > 0 && (
           <AceCard>
@@ -106,13 +140,14 @@ export function MemberPage() {
         <p className="text-xs text-[#6b6b6b]">
           Tukar poin saat checkout (nomor telepon sama dengan profil).
         </p>
+        {loyaltyErr && <p role="status" className="text-xs text-[var(--danger)]">{loyaltyErr}</p>}
 
         <div>
           <h2 className="font-semibold">Riwayat pesanan</h2>
           <div className="mt-2 space-y-2">
             {orders.map((o: any) => (
               <AceCard key={o.id} className="!p-0">
-                <Link className="block p-4 text-sm" to={`/order/${o.publicToken}`}>
+                <Link className="block min-h-11 p-4 text-sm" to={`/order/${o.publicToken}`} aria-label={`Lihat pesanan ${o.orderNumber}`}>
                   <div className="flex justify-between">
                     <span className="font-medium">{o.orderNumber}</span>
                     <span>{formatIdr(o.grandTotal)}</span>

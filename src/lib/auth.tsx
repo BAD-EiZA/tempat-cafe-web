@@ -2,10 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
+import { useAppStore } from './store';
 
 type AuthCtx = {
   isAuthenticated: boolean;
@@ -20,7 +22,7 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-const DEV = import.meta.env.VITE_DEV_AUTH === 'true' || !import.meta.env.VITE_KINDE_CLIENT_ID;
+const DEV = import.meta.env.VITE_DEV_AUTH === 'true';
 const KINDE_DOMAIN = (import.meta.env.VITE_KINDE_DOMAIN || '').replace(/\/$/, '');
 const KINDE_CLIENT_ID = import.meta.env.VITE_KINDE_CLIENT_ID || '';
 const REDIRECT = import.meta.env.VITE_KINDE_REDIRECT_URI || window.location.origin;
@@ -41,10 +43,36 @@ function mockJwt(sub: string, email: string, name: string) {
   return `${header}.${payload}.dev`;
 }
 
-function parseJwt(token: string): { sub?: string; email?: string; name?: string } | null {
+type TokenPayload = { sub?: string; email?: string; name?: string; exp?: number };
+
+function decodePart(part: string) {
+  const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')));
+}
+
+function parseJwt(token: string): TokenPayload | null {
   try {
-    const [, p] = token.split('.');
-    return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/')));
+    const [header, payload] = token.split('.');
+    if (!header || !payload || (!DEV && decodePart(header)?.alg === 'none')) return null;
+    const parsed = decodePart(payload);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.exp != null && (typeof parsed.exp !== 'number' || parsed.exp * 1000 <= Date.now())) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function readUser(raw: string | null): AuthCtx['user'] {
+  if (!raw || !DEV) return null;
+  try {
+    const user = JSON.parse(raw);
+    if (!user || typeof user !== 'object') return null;
+    return {
+      id: typeof user.id === 'string' ? user.id : undefined,
+      email: typeof user.email === 'string' ? user.email : undefined,
+      name: typeof user.name === 'string' ? user.name : undefined,
+    };
   } catch {
     return null;
   }
@@ -55,23 +83,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return null;
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const fromHash = hash.get('access_token') || hash.get('id_token');
-    if (fromHash) {
+    if (fromHash && parseJwt(fromHash)) {
       localStorage.setItem('access_token', fromHash);
       window.history.replaceState({}, '', window.location.pathname + window.location.search);
       return fromHash;
     }
-    return localStorage.getItem('access_token') || localStorage.getItem('dev_token');
+    const stored = localStorage.getItem('access_token') || (DEV ? localStorage.getItem('dev_token') : null);
+    return stored && parseJwt(stored) ? stored : null;
   });
   const [user, setUser] = useState<AuthCtx['user']>(() => {
     if (token) {
       const p = parseJwt(token);
       if (p) return { id: p.sub, email: p.email, name: p.name };
     }
-    const raw = localStorage.getItem('dev_user');
-    return raw ? JSON.parse(raw) : null;
+    return readUser(localStorage.getItem('dev_user'));
   });
 
   const devLogin = useCallback((label = 'owner') => {
+    if (!DEV) return;
     const map: Record<string, { sub: string; email: string; name: string }> = {
       owner: { sub: 'dev-owner', email: 'owner@dev.local', name: 'Owner Dev' },
       admin: { sub: 'dev-platform-admin', email: 'admin@platform.local', name: 'Platform Admin' },
@@ -93,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('dev_token');
     localStorage.removeItem('dev_user');
     localStorage.removeItem('access_token');
+    useAppStore.getState().reset();
     setToken(null);
     setUser(null);
     if (!DEV && KINDE_DOMAIN) {
@@ -100,13 +130,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!token) return;
+    const exp = parseJwt(token)?.exp;
+    if (!exp) return;
+    const timer = window.setTimeout(logout, Math.max(0, exp * 1000 - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [token, logout]);
+
   const login = useCallback(() => {
     if (DEV) {
       devLogin('owner');
       return;
     }
     if (!KINDE_DOMAIN || !KINDE_CLIENT_ID) {
-      devLogin('owner');
+      console.error('Kinde auth is not configured');
       return;
     }
     const params = new URLSearchParams({

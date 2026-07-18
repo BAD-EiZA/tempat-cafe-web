@@ -12,28 +12,59 @@ export function PublicCafePage() {
   const { cafeSlug, branchSlug } = useParams();
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!cafeSlug) return;
     const path = branchSlug
       ? `/public/cafes/${cafeSlug}/${branchSlug}`
       : `/public/cafes/${cafeSlug}`;
+    setErr('');
     api(path)
       .then(setData)
       .catch((e) => setErr(e.message || 'Tidak ditemukan'));
-  }, [cafeSlug, branchSlug]);
+  }, [cafeSlug, branchSlug, retry]);
+
+  useEffect(() => {
+    if (!data?.published) return;
+    const previousTitle = document.title;
+    const title = data.page?.seoTitle || data.page?.title || data.page?.brand?.name;
+    if (title) document.title = title;
+    let description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const previousDescription = description?.content;
+    if (data.page?.seoDescription) {
+      if (!description) {
+        description = document.createElement('meta');
+        description.name = 'description';
+        document.head.appendChild(description);
+      }
+      description.content = data.page.seoDescription;
+    }
+    return () => {
+      document.title = previousTitle;
+      if (description && previousDescription !== undefined) description.content = previousDescription;
+      else if (description) description.remove();
+    };
+  }, [data]);
 
   if (err) {
     return (
       <PageShell>
-        <p className="pt-20 text-center text-[var(--danger)]">{err}</p>
+        <AceCard className="mt-20 text-center" role="alert">
+          <h1 className="font-semibold">Kafe tidak dapat dimuat</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
+            <AceButton as={Link} to="/" variant="ghost">Beranda</AceButton>
+          </div>
+        </AceCard>
       </PageShell>
     );
   }
   if (!data) {
     return (
       <PageShell>
-        <Loader className="pt-20" />
+        <Loader className="pt-20" label="Memuat halaman kafe…" />
       </PageShell>
     );
   }
@@ -141,7 +172,7 @@ export function PublicCafePage() {
             return (
               <div key={idx} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {urls.map((u: string) => (
-                  <img key={u} src={u} alt="" className="h-28 w-full rounded-2xl object-cover shadow-sm" />
+                  <img key={u} src={u} alt={`Galeri ${brandName || title || 'kafe'}`} className="h-28 w-full rounded-2xl object-cover shadow-sm" />
                 ))}
               </div>
             );

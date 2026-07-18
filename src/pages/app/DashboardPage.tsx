@@ -14,6 +14,7 @@ export function DashboardPage() {
   const branchId = useAppStore((s) => s.branchId);
   const [sales, setSales] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!organizationId) {
@@ -21,9 +22,13 @@ export function DashboardPage() {
       return;
     }
     setLoading(true);
+    setError('');
     api(`/reports/sales?organizationId=${organizationId}${branchId ? `&branchId=${branchId}` : ''}`)
       .then(setSales)
-      .catch(() => setSales(null))
+      .catch((e) => {
+        setSales(null);
+        setError(e.message || 'Gagal memuat dashboard.');
+      })
       .finally(() => setLoading(false));
   }, [api, organizationId, branchId]);
 
@@ -41,6 +46,8 @@ export function DashboardPage() {
 
   if (loading) return <Loader />;
 
+  if (error) return <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>;
+
   return (
     <div className="animate-float-up space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -48,7 +55,7 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-[#6b6b6b]">Ringkasan operasional cabang</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <AceButton as={Link} to="/pos" variant="primary">
             POS
           </AceButton>
@@ -66,12 +73,12 @@ export function DashboardPage() {
       </div>
 
       <BentoGrid>
-        <BentoGridItem title="Menu" description="Kelola kategori & item" onClick={() => (window.location.href = '/app/menu')} />
-        <BentoGridItem title="Meja & QR" description="Floor map & rotate QR" onClick={() => (window.location.href = '/app/tables')} />
-        <BentoGridItem title="Reservasi" description="Check-in & kapasitas" onClick={() => (window.location.href = '/app/reservations')} />
-        <BentoGridItem title="Ledger" description="Saldo & payout" onClick={() => (window.location.href = '/app/ledger')} />
-        <BentoGridItem title="KDS" description="Kitchen display" onClick={() => (window.location.href = '/kds')} />
-        <BentoGridItem title="Homepage" description="Builder publik" onClick={() => (window.location.href = '/app/homepage')} />
+        <Link to="/app/menu"><BentoGridItem title="Menu" description="Kelola kategori & item" /></Link>
+        <Link to="/app/tables"><BentoGridItem title="Meja & QR" description="Floor map & rotate QR" /></Link>
+        <Link to="/app/reservations"><BentoGridItem title="Reservasi" description="Check-in & kapasitas" /></Link>
+        <Link to="/app/ledger"><BentoGridItem title="Ledger" description="Saldo & payout" /></Link>
+        <Link to="/kds"><BentoGridItem title="KDS" description="Kitchen display" /></Link>
+        <Link to="/app/homepage"><BentoGridItem title="Homepage" description="Builder publik" /></Link>
       </BentoGrid>
     </div>
   );

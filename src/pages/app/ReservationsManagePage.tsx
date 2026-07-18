@@ -11,10 +11,16 @@ export function ReservationsManagePage() {
   const branchId = useAppStore((s) => s.branchId);
   const [rows, setRows] = useState<any[]>([]);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
-    if (!branchId) return;
-    setRows(await api<any[]>(`/reservations?branchId=${branchId}`));
+    if (!branchId) { setLoading(false); return; }
+    setError('');
+    try { setRows(await api<any[]>(`/reservations?branchId=${branchId}`)); }
+    catch (e: any) { setError(e.message || 'Gagal memuat reservasi.'); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -24,19 +30,28 @@ export function ReservationsManagePage() {
   }, [api, branchId]);
 
   async function setStatus(id: string, status: string) {
-    await api(`/reservations/${id}/status`, { method: 'PATCH', body: { status } });
-    await load();
+    if (status === 'CANCELLED' && !window.confirm('Batalkan reservasi ini?')) return;
+    setBusyId(id); setError('');
+    try { await api(`/reservations/${id}/status`, { method: 'PATCH', body: { status } }); await load(); }
+    catch (e: any) { setError(e.message || 'Gagal mengubah status reservasi.'); }
+    finally { setBusyId(''); }
   }
 
   async function confirmDeposit(id: string) {
-    await api(`/reservations/${id}/confirm-deposit`, { method: 'POST' });
-    setMsg('Deposit dikonfirmasi');
-    await load();
+    const row = rows.find((r) => r.id === id);
+    if (!window.confirm(`Konfirmasi deposit ${formatIdr(row?.depositAmount || 0)} sudah diterima?`)) return;
+    setBusyId(id); setError('');
+    try { await api(`/reservations/${id}/confirm-deposit`, { method: 'POST' }); setMsg('Deposit dikonfirmasi'); await load(); }
+    catch (e: any) { setError(e.message || 'Gagal mengonfirmasi deposit.'); }
+    finally { setBusyId(''); }
   }
 
   async function noShow(id: string) {
-    await api(`/reservations/${id}/no-show`, { method: 'POST' });
-    await load();
+    if (!window.confirm('Tandai reservasi ini sebagai no-show?')) return;
+    setBusyId(id); setError('');
+    try { await api(`/reservations/${id}/no-show`, { method: 'POST' }); await load(); }
+    catch (e: any) { setError(e.message || 'Gagal menandai no-show.'); }
+    finally { setBusyId(''); }
   }
 
   if (!branchId) return <p className="text-[#6b6b6b]">Pilih branch dulu.</p>;
@@ -44,7 +59,9 @@ export function ReservationsManagePage() {
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Reservasi</h1>
-      {msg && <p className="mt-2 text-sm text-[#6b6b6b]">{msg}</p>}
+      {loading && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">Memuat reservasi…</p>}
+      {msg && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">{msg}</p>}
+      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
       <div className="mt-6 space-y-2">
         {rows.map((r) => (
           <AceCard key={r.id} className="flex flex-wrap items-center justify-between gap-3">
@@ -64,34 +81,34 @@ export function ReservationsManagePage() {
             </div>
             <div className="flex flex-wrap gap-1">
               {r.status === 'PENDING_PAYMENT' && (
-                <AceButton variant="accent" className="!text-sm" onClick={() => confirmDeposit(r.id)}>
+                <AceButton variant="accent" className="!text-sm" disabled={busyId === r.id} onClick={() => confirmDeposit(r.id)}>
                   Confirm deposit
                 </AceButton>
               )}
               {r.status === 'CONFIRMED' && (
-                <AceButton variant="accent" className="!text-sm" onClick={() => setStatus(r.id, 'CHECKED_IN')}>
+                <AceButton variant="accent" className="!text-sm" disabled={busyId === r.id} onClick={() => setStatus(r.id, 'CHECKED_IN')}>
                   Check-in
                 </AceButton>
               )}
               {r.status === 'CHECKED_IN' && (
-                <AceButton variant="primary" className="!text-sm" onClick={() => setStatus(r.id, 'SEATED')}>
+                <AceButton variant="primary" className="!text-sm" disabled={busyId === r.id} onClick={() => setStatus(r.id, 'SEATED')}>
                   Seated
                 </AceButton>
               )}
               {['CONFIRMED', 'PENDING_PAYMENT'].includes(r.status) && (
-                <AceButton variant="ghost" className="!text-sm" onClick={() => noShow(r.id)}>
+                <AceButton variant="ghost" className="!text-sm" disabled={busyId === r.id} onClick={() => noShow(r.id)}>
                   No-show
                 </AceButton>
               )}
               {!['CANCELLED', 'NO_SHOW', 'COMPLETED'].includes(r.status) && (
-                <AceButton variant="ghost" className="!text-sm" onClick={() => setStatus(r.id, 'CANCELLED')}>
+                <AceButton variant="danger" className="!text-sm" disabled={busyId === r.id} onClick={() => setStatus(r.id, 'CANCELLED')}>
                   Cancel
                 </AceButton>
               )}
             </div>
           </AceCard>
         ))}
-        {!rows.length && <EmptyState title="Belum ada reservasi." />}
+        {!loading && !rows.length && !error && <EmptyState title="Belum ada reservasi." />}
       </div>
     </div>
   );

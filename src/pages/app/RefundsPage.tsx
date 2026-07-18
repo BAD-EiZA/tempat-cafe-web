@@ -17,17 +17,22 @@ export function RefundsPage() {
   const [target, setTarget] = useState<any | null>(null);
   const [amount, setAmount] = useState(0);
   const [reason, setReason] = useState('merchant refund');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   async function load() {
-    if (!branchId) return;
-    const list = await api<any[]>(`/orders?branchId=${branchId}`);
-    setOrders(
+    if (!branchId) { setLoading(false); return; }
+    setLoading(true); setError('');
+    try { const list = await api<any[]>(`/orders?branchId=${branchId}`);
+      setOrders(
       list.filter(
         (o) =>
           o.payments?.some((p: any) => p.status === 'PAID') ||
           ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'].includes(o.status),
       ),
-    );
+      );
+    } catch (e: any) { setError(e.message || 'Gagal memuat order.'); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -48,8 +53,11 @@ export function RefundsPage() {
 
   async function submitRefund() {
     if (!target || !amount) return;
+    const max = target.payment.amount || target.order.grandTotal;
+    if (amount > max) { setError(`Jumlah refund maksimal ${formatIdr(max)}.`); return; }
+    if (!window.confirm(`Ajukan refund ${formatIdr(amount)} untuk order ${target.order.orderNumber}?`)) return;
     setBusy(true);
-    setMsg('');
+    setMsg(''); setError('');
     try {
       await api(`/payments/${target.payment.id}/refunds`, {
         method: 'POST',
@@ -63,7 +71,7 @@ export function RefundsPage() {
       setTarget(null);
       await load();
     } catch (e: any) {
-      setMsg(e.message || 'Gagal refund');
+      setError(e.message || 'Gagal refund');
     } finally {
       setBusy(false);
     }
@@ -74,7 +82,9 @@ export function RefundsPage() {
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Refund</h1>
-      {msg && <p className="mt-2 text-sm text-[#6b6b6b]">{msg}</p>}
+      {loading && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">Memuat order…</p>}
+      {msg && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">{msg}</p>}
+      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
       <div className="mt-6 space-y-2">
         {orders.map((o) => (
           <AceCard key={o.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -89,10 +99,10 @@ export function RefundsPage() {
             </AceButton>
           </AceCard>
         ))}
-        {!orders.length && <EmptyState title="Belum ada order." />}
+        {!loading && !orders.length && !error && <EmptyState title="Belum ada order." />}
       </div>
 
-      <AnimatedModal open={!!target} onClose={() => setTarget(null)} title="Ajukan refund">
+      <AnimatedModal open={!!target} onClose={() => { if (!busy) setTarget(null); }} title="Ajukan refund">
         {target && (
           <div className="space-y-3">
             <p className="text-sm text-[#6b6b6b]">
@@ -111,7 +121,7 @@ export function RefundsPage() {
               <AceButton variant="danger" disabled={busy || !amount} onClick={submitRefund}>
                 {busy ? '…' : 'Submit refund'}
               </AceButton>
-              <AceButton variant="ghost" onClick={() => setTarget(null)}>
+              <AceButton variant="ghost" disabled={busy} onClick={() => setTarget(null)}>
                 Batal
               </AceButton>
             </div>

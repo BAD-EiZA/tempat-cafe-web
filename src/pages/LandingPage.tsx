@@ -46,6 +46,7 @@ export function LandingPage() {
       />
 
       <main className="pt-24">
+        <h1 className="sr-only">Cafe Platform</h1>
         <TextGenerateEffect
           words="Homepage, QR order, POS & dapur — satu platform."
           className="max-w-2xl text-4xl md:text-5xl"

@@ -14,6 +14,8 @@ export function LedgerPage() {
   const [loading, setLoading] = useState(true);
   const [payoutAmt, setPayoutAmt] = useState(0);
   const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!organizationId) {
@@ -21,6 +23,7 @@ export function LedgerPage() {
       return;
     }
     setLoading(true);
+    setError('');
     Promise.all([
       api(`/ledger/balance?organizationId=${organizationId}`),
       api<any[]>(`/ledger?organizationId=${organizationId}`),
@@ -29,16 +32,19 @@ export function LedgerPage() {
         setBalance(b);
         setEntries(Array.isArray(e) ? e : []);
       })
-      .catch(() => {
+      .catch((e: any) => {
         setBalance(null);
         setEntries([]);
+        setError(e.message || 'Gagal memuat ledger.');
       })
       .finally(() => setLoading(false));
   }, [api, organizationId]);
 
   async function requestPayout() {
     if (!organizationId || !payoutAmt) return;
+    if (!window.confirm(`Buat batch payout ${formatIdr(payoutAmt)}? Tindakan ini memerlukan persetujuan platform.`)) return;
     setMsg('');
+    setError(''); setBusy(true);
     try {
       // Platform creates batch; merchant request logs via ledger adjust note path — use platform payout when admin
       await api('/platform/payout-batches', {
@@ -47,16 +53,17 @@ export function LedgerPage() {
       });
       setMsg('Payout batch DRAFT dibuat — platform harus submit & approve (dual control)');
     } catch (e: any) {
-      setMsg(e.message || 'Gagal (butuh permission payout.manage)');
-    }
+      setError(e.message || 'Gagal (butuh permission payout.manage)');
+    } finally { setBusy(false); }
   }
 
   if (!organizationId) return <p className="text-[var(--muted)]">Pilih tenant dulu.</p>;
-  if (loading) return <p className="text-[var(--muted)]">Memuat ledger…</p>;
+  if (loading) return <p className="text-[var(--muted)]" role="status">Memuat ledger…</p>;
 
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Ledger & saldo</h1>
+      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
       {balance && (
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           {[
@@ -78,13 +85,15 @@ export function LedgerPage() {
           className="input"
           type="number"
           placeholder="Jumlah IDR"
+          aria-label="Jumlah payout dalam IDR"
+          min={1}
           value={payoutAmt || ''}
           onChange={(e) => setPayoutAmt(Number(e.target.value))}
         />
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" onClick={requestPayout}>
-          Buat batch
+        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" onClick={requestPayout} disabled={busy || payoutAmt <= 0}>
+          {busy ? 'Membuat…' : 'Buat batch'}
         </button>
-        {msg && <p className="text-sm text-[var(--muted)]">{msg}</p>}
+        {msg && <p className="text-sm text-[var(--muted)]" role="status">{msg}</p>}
       </div>
 
       <div className="mt-6 space-y-2">
@@ -99,7 +108,7 @@ export function LedgerPage() {
             </span>
           </div>
         ))}
-        {!entries.length && <p className="text-[var(--muted)]">Belum ada entri.</p>}
+        {!entries.length && !error && <EmptyState title="Belum ada entri." />}
       </div>
     </div>
   );

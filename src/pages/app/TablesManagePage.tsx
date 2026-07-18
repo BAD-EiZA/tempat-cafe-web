@@ -4,6 +4,7 @@ import { AceButton } from '@/components/ace/AceButton';
 import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
+import { Loader } from '@/components/ui/loader';
 
 export function TablesManagePage() {
   const api = useApi();
@@ -16,9 +17,20 @@ export function TablesManagePage() {
   const [tableForm, setTableForm] = useState({ areaId: '', name: '', capacity: 4 });
   const [dragId, setDragId] = useState<string | null>(null);
   const [tab, setTab] = useState<'list' | 'map'>('list');
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
-    if (!branchId) return;
+    if (!branchId) {
+      setAreas([]);
+      setTables([]);
+      setFloor([]);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
     const [a, t, f] = await Promise.all([
       api<any[]>(`/areas?branchId=${branchId}`),
       api<any[]>(`/tables?branchId=${branchId}`),
@@ -27,38 +39,64 @@ export function TablesManagePage() {
     setAreas(a);
     setTables(t);
     setFloor(f.length ? f : t);
+    } catch (e: any) {
+      setError(e.message || 'Gagal memuat meja.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load().catch(() => undefined);
+    load();
   }, [api, branchId]);
 
   async function addArea(e: React.FormEvent) {
     e.preventDefault();
-    await api('/areas', { method: 'POST', body: { branchId, name: areaName } });
-    setAreaName('');
-    await load();
+    if (busy) return;
+    setBusy('area');
+    setError('');
+    try {
+      await api('/areas', { method: 'POST', body: { branchId, name: areaName } });
+      setAreaName('');
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal menambah area.');
+    } finally {
+      setBusy('');
+    }
   }
 
   async function addTable(e: React.FormEvent) {
     e.preventDefault();
-    await api('/tables', {
-      method: 'POST',
-      body: { ...tableForm, branchId, capacity: Number(tableForm.capacity) },
-    });
-    setTableForm({ ...tableForm, name: '' });
-    await load();
+    if (busy) return;
+    setBusy('table');
+    setError('');
+    try {
+      await api('/tables', { method: 'POST', body: { ...tableForm, branchId, capacity: Number(tableForm.capacity) } });
+      setTableForm({ ...tableForm, name: '' });
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal menambah meja.');
+    } finally {
+      setBusy('');
+    }
   }
 
   async function rotateQr(id: string) {
-    const qr = await api<any>(`/tables/${id}/rotate-qr`, { method: 'POST' });
-    await load();
-    const url = `${window.location.origin}/qr/${qr.token}`;
-    await navigator.clipboard?.writeText(url);
-    window.open(
-      `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`,
-      '_blank',
-    );
+    if (busy || !window.confirm('QR lama akan langsung tidak berlaku. Rotate QR meja ini?')) return;
+    setBusy(id);
+    setError('');
+    try {
+      const qr = await api<any>(`/tables/${id}/rotate-qr`, { method: 'POST' });
+      await load();
+      const url = `${window.location.origin}/qr/${qr.token}`;
+      await navigator.clipboard?.writeText(url);
+      window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`, '_blank');
+    } catch (e: any) {
+      setError(e.message || 'Gagal merotasi QR.');
+    } finally {
+      setBusy('');
+    }
   }
 
   function qrUrl(token: string) {
@@ -76,7 +114,7 @@ export function TablesManagePage() {
   }
 
   async function onMapPointerUp(e: React.PointerEvent) {
-    if (!dragId || !mapRef.current) {
+    if (!dragId || !mapRef.current || busy) {
       setDragId(null);
       return;
     }
@@ -86,16 +124,27 @@ export function TablesManagePage() {
     const posX = Math.max(0, Math.min(100, x));
     const posY = Math.max(0, Math.min(100, y));
     setFloor((prev) => prev.map((t) => (t.id === dragId ? { ...t, posX, posY } : t)));
-    await api(`/tables/${dragId}/position`, { method: 'PATCH', body: { posX, posY } });
-    setDragId(null);
+    setBusy('position');
+    setError('');
+    try {
+      await api(`/tables/${dragId}/position`, { method: 'PATCH', body: { posX, posY } });
+    } catch (e: any) {
+      setError(e.message || 'Gagal menyimpan posisi meja.');
+      await load();
+    } finally {
+      setDragId(null);
+      setBusy('');
+    }
   }
 
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Meja & QR</h1>
       {!branchId && <p className="mt-4 text-[var(--muted)]">Pilih tenant di dashboard dulu.</p>}
+      {loading && <Loader label="Memuat meja…" />}
+      {error && <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button className={`btn text-sm ${tab === 'list' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('list')}>
           List
         </button>
@@ -109,15 +158,17 @@ export function TablesManagePage() {
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addArea}>
               <h2 className="font-semibold">Area</h2>
+              <label className="label" htmlFor="area-name">Nama area</label>
               <input
+                id="area-name"
                 className="input"
                 placeholder="Nama area"
                 value={areaName}
                 onChange={(e) => setAreaName(e.target.value)}
                 required
               />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a]" type="submit" disabled={!branchId}>
-                Tambah area
+              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!branchId || !!busy}>
+                {busy === 'area' ? 'Menambah…' : 'Tambah area'}
               </button>
               <ul className="text-sm text-[var(--muted)]">
                 {areas.map((a) => (
@@ -128,7 +179,9 @@ export function TablesManagePage() {
 
             <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addTable}>
               <h2 className="font-semibold">Meja</h2>
+              <label className="label" htmlFor="table-area">Area</label>
               <select
+                id="table-area"
                 className="input"
                 value={tableForm.areaId}
                 onChange={(e) => setTableForm({ ...tableForm, areaId: e.target.value })}
@@ -141,28 +194,32 @@ export function TablesManagePage() {
                   </option>
                 ))}
               </select>
+              <label className="label" htmlFor="table-name">Nama meja</label>
               <input
+                id="table-name"
                 className="input"
                 placeholder="Nama meja"
                 value={tableForm.name}
                 onChange={(e) => setTableForm({ ...tableForm, name: e.target.value })}
                 required
               />
+              <label className="label" htmlFor="table-capacity">Kapasitas</label>
               <input
+                id="table-capacity"
                 className="input"
                 type="number"
                 min={1}
                 value={tableForm.capacity}
                 onChange={(e) => setTableForm({ ...tableForm, capacity: Number(e.target.value) })}
               />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a]" type="submit" disabled={!branchId}>
-                Tambah meja
+              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!branchId || !!busy}>
+                {busy === 'table' ? 'Menambah…' : 'Tambah meja'}
               </button>
             </form>
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {tables.map((t) => {
+            {!loading && tables.map((t) => {
               const tok = t.qrTokens?.[0]?.token;
               return (
                 <div key={t.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm flex flex-col items-center gap-2 text-center">
@@ -183,19 +240,20 @@ export function TablesManagePage() {
                       </a>
                     </>
                   )}
-                  <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white text-sm" onClick={() => rotateQr(t.id)}>
-                    Rotate QR
+                  <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!!busy} onClick={() => rotateQr(t.id)}>
+                    {busy === t.id ? 'Rotating…' : 'Rotate QR'}
                   </button>
                 </div>
               );
             })}
+            {!loading && !error && branchId && !tables.length && <EmptyState title="Belum ada meja." description="Tambahkan area, lalu meja." />}
           </div>
         </>
       )}
 
       {tab === 'map' && (
         <div className="mt-6">
-          <p className="mb-2 text-sm text-[var(--muted)]">Drag meja untuk simpan posisi (%).</p>
+          <p className="mb-2 text-sm text-[var(--muted)]">Drag meja untuk simpan posisi (%). {busy === 'position' && 'Menyimpan…'}</p>
           <div
             ref={mapRef}
             className="relative h-[420px] w-full max-w-3xl rounded-xl border border-[#e8e4de] bg-[var(--surface)]"
@@ -215,7 +273,8 @@ export function TablesManagePage() {
                       : 'border-[var(--accent)] bg-white'
                   }`}
                   style={{ left: `${x}%`, top: `${y}%` }}
-                  onPointerDown={(e) => onMapPointerDown(t.id, e)}
+                   onPointerDown={(e) => onMapPointerDown(t.id, e)}
+                   disabled={!!busy}
                   title={t.area?.name || ''}
                 >
                   <span>{t.name}</span>
@@ -223,6 +282,7 @@ export function TablesManagePage() {
                 </button>
               );
             })}
+            {!loading && !error && !floor.length && <div className="p-6 text-sm text-[var(--muted)]">Belum ada meja untuk floor map.</div>}
           </div>
         </div>
       )}

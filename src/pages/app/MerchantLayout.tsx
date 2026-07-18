@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { AceSidebar } from '@/components/ui/sidebar';
 import { AceButton } from '@/components/ace/AceButton';
+import { BrandFooter } from '@/components/ace/BrandFooter';
 
 const links = [
   { label: 'Dashboard', href: '/app', end: true },
@@ -28,7 +29,7 @@ const links = [
 export function MerchantLayout() {
   const { user, logout } = useAuth();
   return (
-    <div className="relative flex min-h-screen bg-[#faf8f5]">
+    <div className="relative flex min-h-screen flex-col bg-[#faf8f5] md:flex-row">
       <div className="pointer-events-none absolute inset-0 bg-dot-grid opacity-30" />
       <AceSidebar
         brand="Cafe Merchant"
@@ -52,6 +53,7 @@ export function MerchantLayout() {
         <main className="flex-1 p-4 md:p-8">
           <Outlet />
         </main>
+        <BrandFooter />
       </div>
     </div>
   );

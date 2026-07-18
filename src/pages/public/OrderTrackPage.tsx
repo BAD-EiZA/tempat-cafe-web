@@ -31,6 +31,9 @@ export function OrderTrackPage() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [fbOk, setFbOk] = useState(false);
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbErr, setFbErr] = useState('');
+  const [retry, setRetry] = useState(0);
   const clearCart = useAppStore((s) => s.clearCart);
   const addToCart = useAppStore((s) => s.addToCart);
   const setTenant = useAppStore((s) => s.setTenant);
@@ -41,15 +44,19 @@ export function OrderTrackPage() {
     let alive = true;
     const load = () =>
       api<any>(`/public/orders/${publicToken}`)
-        .then((o) => alive && setOrder(o))
-        .catch((e) => alive && setErr(e.message));
+        .then((o) => {
+          if (!alive) return;
+          setOrder(o);
+          setErr('');
+        })
+        .catch((e) => alive && setErr(e.message || 'Pesanan gagal dimuat'));
     load();
     const t = setInterval(load, 3000);
     return () => {
       alive = false;
       clearInterval(t);
     };
-  }, [publicToken]);
+  }, [publicToken, retry]);
 
   async function reorder() {
     if (!order) return;
@@ -72,17 +79,32 @@ export function OrderTrackPage() {
   async function sendFeedback(e: React.FormEvent) {
     e.preventDefault();
     if (!publicToken) return;
-    await api('/feedback/by-token', {
-      method: 'POST',
-      body: { publicToken, overallRating: rating, comment },
-    });
-    setFbOk(true);
+    setFbBusy(true);
+    setFbErr('');
+    try {
+      await api('/feedback/by-token', {
+        method: 'POST',
+        body: { publicToken, overallRating: rating, comment },
+      });
+      setFbOk(true);
+    } catch (e: any) {
+      setFbErr(e.message || 'Feedback gagal dikirim');
+    } finally {
+      setFbBusy(false);
+    }
   }
 
-  if (err) {
+  if (err && !order) {
     return (
       <PageShell maxWidth="max-w-lg">
-        <p className="pt-10 text-center text-[var(--danger)]">{err}</p>
+        <AceCard className="mt-10 text-center" role="alert">
+          <h1 className="font-semibold">Pesanan tidak dapat dimuat</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
+            <AceButton as={Link} to="/" variant="ghost">Beranda</AceButton>
+          </div>
+        </AceCard>
       </PageShell>
     );
   }
@@ -104,7 +126,8 @@ export function OrderTrackPage() {
     <PageShell beams maxWidth="max-w-lg" className="pb-10">
       <p className="text-sm text-[#6b6b6b]">Nomor pesanan</p>
       <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
-      <AceBadge tone="ok">{STATUS_LABEL[order.status] || order.status}</AceBadge>
+      <span role="status" aria-live="polite"><AceBadge tone="ok">{STATUS_LABEL[order.status] || order.status}</AceBadge></span>
+      {err && <p role="status" className="mt-2 text-xs text-[var(--danger)]">Pembaruan status terhenti: {err}</p>}
 
       <AceCard className="mt-6">
         <Timeline
@@ -166,21 +189,22 @@ export function OrderTrackPage() {
         <AceCard className="mt-4">
           <form className="space-y-2" onSubmit={sendFeedback}>
             <h2 className="font-semibold">Feedback</h2>
-            <AceSelect value={rating} onChange={(e) => setRating(Number(e.target.value))}>
+            <AceSelect label="Rating" value={rating} onChange={(e) => setRating(Number(e.target.value))}>
               {[5, 4, 3, 2, 1].map((n) => (
                 <option key={n} value={n}>
                   {n} bintang
                 </option>
               ))}
             </AceSelect>
-            <AceInput placeholder="Komentar" value={comment} onChange={(e) => setComment(e.target.value)} />
-            <AceButton type="submit" variant="primary" className="w-full">
-              Kirim
+            <AceInput label="Komentar" value={comment} onChange={(e) => setComment(e.target.value)} />
+            {fbErr && <p role="alert" className="text-sm text-[var(--danger)]">{fbErr}</p>}
+            <AceButton type="submit" variant="primary" className="w-full" disabled={fbBusy}>
+              {fbBusy ? 'Mengirim…' : 'Kirim'}
             </AceButton>
           </form>
         </AceCard>
       )}
-      {fbOk && <p className="mt-3 text-sm text-[var(--ok)]">Terima kasih atas feedback!</p>}
+      {fbOk && <p role="status" className="mt-3 text-sm text-[var(--ok)]">Terima kasih atas feedback!</p>}
 
       <AceButton as={Link} to="/" variant="ghost" className="mt-6 w-full">
         Beranda

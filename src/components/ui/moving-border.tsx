@@ -20,7 +20,7 @@ export function MovingBorderButton({
   return (
     <Comp
       className={cn(
-        'relative inline-flex overflow-hidden rounded-xl p-[1px] focus:outline-none',
+        'relative inline-flex overflow-hidden rounded-xl p-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c4a574] focus-visible:ring-offset-2',
         containerClassName,
       )}
       {...props}

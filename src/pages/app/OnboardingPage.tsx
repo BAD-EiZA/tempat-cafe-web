@@ -24,10 +24,13 @@ export function OnboardingPage() {
   const [result, setResult] = useState<any>(null);
   const [err, setErr] = useState('');
   const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setErr('');
+    setBusy(true);
     try {
       const org = await api<any>('/organizations', {
         method: 'POST',
@@ -60,13 +63,15 @@ export function OnboardingPage() {
       setResult(org);
     } catch (e: any) {
       setErr(e.message || 'Gagal');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <div className="max-w-xl">
       <h1 className="text-2xl font-bold">Onboarding Merchant</h1>
-      <form className="mt-6 space-y-3" onSubmit={submit}>
+      <form className="mt-6 space-y-3" onSubmit={submit} aria-busy={busy}>
         {[
           ['name', 'Nama usaha'],
           ['legalName', 'Nama legal'],
@@ -81,18 +86,21 @@ export function OnboardingPage() {
           ['accountNumber', 'No. rekening'],
         ].map(([key, label]) => (
           <div key={key}>
-            <label className="label">{label}</label>
+            <label className="label" htmlFor={`onboarding-${key}`}>{label}</label>
             <input
+              id={`onboarding-${key}`}
               className="input"
               value={(form as any)[key]}
               onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              required={key === 'name'}
+              required={['name', 'legalName', 'email', 'phone', 'branchName'].includes(key)}
+              type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'}
+              disabled={busy}
             />
           </div>
         ))}
-        {err && <p className="text-sm text-[var(--danger)]">{err}</p>}
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="submit">
-          Buat merchant
+        {err && <p role="alert" className="text-sm text-[var(--danger)]">{err}</p>}
+        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={busy}>
+          {busy ? 'Membuat merchant…' : 'Buat merchant'}
         </button>
       </form>
       {result && (

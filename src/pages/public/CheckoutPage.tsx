@@ -6,7 +6,6 @@ import { PageShell } from '@/components/ace/PageShell';
 import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
 import { AceInput } from '@/components/ace/AceInput';
-import { AceTabs } from '@/components/ui/tabs';
 import { MultiStepLoader } from '@/components/ui/loader';
 import { MovingBorderButton } from '@/components/ui/moving-border';
 import { isMockSnap, loadSnap } from '@/lib/snap';
@@ -32,18 +31,27 @@ export function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [err, setErr] = useState('');
+  const [loyaltyErr, setLoyaltyErr] = useState('');
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const subtotal = useMemo(() => cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0), [cart]);
 
   useEffect(() => {
     if (!organizationId || !phone || phone.length < 8) {
       setLoyalty(null);
+      setLoyaltyErr('');
       return;
     }
     const t = setTimeout(() => {
       api<any>(`/loyalty/lookup?organizationId=${organizationId}&phone=${encodeURIComponent(phone)}`)
-        .then((r) => setLoyalty(r))
-        .catch(() => setLoyalty(null));
+        .then((r) => {
+          setLoyalty(r);
+          setLoyaltyErr('');
+        })
+        .catch(() => {
+          setLoyalty(null);
+          setLoyaltyErr('Poin tidak dapat diperiksa. Checkout tetap bisa dilanjutkan.');
+        });
     }, 400);
     return () => clearTimeout(t);
   }, [organizationId, phone]);
@@ -71,12 +79,12 @@ export function CheckoutPage() {
           voucherCode: voucher || undefined,
           redeemPoints: redeemPoints || undefined,
           organizationId: organizationId || undefined,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
           items: cart.map((c) => ({
             menuItemId: c.menuItemId,
             quantity: c.quantity,
             notes: c.notes,
-            modifiers: c.modifiers,
+            modifiers: c.modifiers?.map(({ modifierId }) => ({ modifierId })),
           })),
         },
       });
@@ -122,10 +130,9 @@ export function CheckoutPage() {
           clearCart();
           navigate(`/order/${order.publicToken}`);
         },
-        onError: () => setErr('Pembayaran gagal'),
+        onError: () => setErr('Pembayaran gagal. Coba bayar lagi.'),
         onClose: () => {
-          clearCart();
-          navigate(`/order/${order.publicToken}`);
+          setErr('Pembayaran belum selesai. Keranjang tetap tersimpan untuk dicoba lagi.');
         },
       });
     } catch (e: any) {
@@ -139,9 +146,10 @@ export function CheckoutPage() {
     return (
       <PageShell maxWidth="max-w-lg">
         <AceCard className="mt-10 text-center">
-          <p>Keranjang kosong</p>
+          <h1 className="font-semibold">Keranjang kosong</h1>
+          <p className="mt-1 text-sm text-[#6b6b6b]">Tambahkan item dari menu sebelum checkout.</p>
           <AceButton as={Link} to="/" variant="primary" className="mt-4">
-            Kembali
+            Kembali ke beranda
           </AceButton>
         </AceCard>
       </PageShell>
@@ -150,7 +158,11 @@ export function CheckoutPage() {
 
   return (
     <PageShell beams maxWidth="max-w-lg" className="pb-10">
+      <button type="button" className="mb-3 inline-flex min-h-11 items-center text-sm underline" onClick={() => navigate(-1)}>
+        ← Kembali ke menu
+      </button>
       <h1 className="text-2xl font-bold">Checkout</h1>
+      {!branchId && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">Sesi kafe tidak ditemukan. Kembali ke menu lalu coba lagi.</p>}
       {busy && (
         <AceCard className="mt-4">
           <MultiStepLoader
@@ -161,7 +173,7 @@ export function CheckoutPage() {
       )}
       <ul className="mt-4 space-y-2">
         {cart.map((c) => (
-          <AceCard key={c.menuItemId} className="flex justify-between text-sm !py-3">
+          <AceCard key={c.lineId || c.menuItemId} className="flex justify-between text-sm !py-3">
             <span>
               {c.quantity}× {c.name}
             </span>
@@ -178,6 +190,8 @@ export function CheckoutPage() {
         <AceInput label="Nama" value={name} onChange={(e) => setName(e.target.value)} />
         <AceInput
           label="Telepon (poin member)"
+          type="tel"
+          inputMode="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="08…"
@@ -187,9 +201,10 @@ export function CheckoutPage() {
             Saldo poin: {loyalty.balance} · ≈ {formatIdr(loyalty.discountPerPoint || 0)}/poin
           </p>
         )}
+        {loyaltyErr && <p role="status" className="text-xs text-[var(--danger)]">{loyaltyErr}</p>}
         <AceInput label="Catatan" value={notes} onChange={(e) => setNotes(e.target.value)} />
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-[#6b6b6b]">Tip</label>
+          <span className="mb-1.5 block text-sm font-semibold text-[#6b6b6b]" id="tip-label">Tip</span>
           <div className="mb-2 flex flex-wrap gap-2">
             {TIP_PRESETS.map((p) => (
               <AceButton
@@ -198,12 +213,13 @@ export function CheckoutPage() {
                 variant={tip === p ? 'primary' : 'ghost'}
                 className="!text-sm"
                 onClick={() => setTip(p)}
+                aria-pressed={tip === p}
               >
                 {p === 0 ? 'Tanpa tip' : formatIdr(p)}
               </AceButton>
             ))}
           </div>
-          <AceInput type="number" min={0} value={tip} onChange={(e) => setTip(Number(e.target.value) || 0)} />
+          <AceInput label="Nominal tip lain" type="number" min={0} value={tip} onChange={(e) => setTip(Number(e.target.value) || 0)} />
         </div>
         <AceInput label="Voucher" value={voucher} onChange={(e) => setVoucher(e.target.value)} />
         {loyalty && loyalty.balance > 0 && (
@@ -218,7 +234,7 @@ export function CheckoutPage() {
             }
           />
         )}
-        {err && <p className="text-sm text-[var(--danger)]">{err}</p>}
+        {err && <p role="alert" className="text-sm text-[var(--danger)]">{err}</p>}
         <MovingBorderButton type="submit" disabled={busy || !branchId} containerClassName="w-full" className="w-full">
           {busy ? 'Memproses…' : 'Bayar & pesan'}
         </MovingBorderButton>

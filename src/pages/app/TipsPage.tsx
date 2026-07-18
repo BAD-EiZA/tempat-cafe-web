@@ -15,13 +15,18 @@ export function TipsPage() {
   const [selected, setSelected] = useState<any | null>(null);
   const [splits, setSplits] = useState<{ userId: string; amount: number }[]>([]);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   async function load() {
-    if (!branchId) return;
-    setTips(await api<any[]>(`/tips?branchId=${branchId}`));
-    if (organizationId) {
-      setStaff(await api<any[]>(`/organizations/${organizationId}/members`).catch(() => []));
-    }
+    if (!branchId) { setLoading(false); return; }
+    setLoading(true); setError('');
+    try {
+      setTips(await api<any[]>(`/tips?branchId=${branchId}`));
+      if (organizationId) setStaff(await api<any[]>(`/organizations/${organizationId}/members`));
+    } catch (e: any) { setError(e.message || 'Gagal memuat tip.'); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -48,7 +53,11 @@ export function TipsPage() {
 
   async function allocate() {
     if (!selected) return;
+    const total = splits.reduce((sum, split) => sum + split.amount, 0);
+    if (total !== selected.amount) { setError('Total split harus sama dengan jumlah tip.'); return; }
+    if (!window.confirm(`Alokasikan tip ${formatIdr(selected.amount)}?`)) return;
     setMsg('');
+    setError(''); setBusy(true);
     try {
       await api(`/tips/${selected.id}/allocate`, {
         method: 'POST',
@@ -58,8 +67,8 @@ export function TipsPage() {
       setSelected(null);
       await load();
     } catch (e: any) {
-      setMsg(e.message || 'Gagal');
-    }
+      setError(e.message || 'Gagal mengalokasikan tip.');
+    } finally { setBusy(false); }
   }
 
   if (!branchId) return <p className="text-[var(--muted)]">Pilih branch dulu.</p>;
@@ -67,12 +76,14 @@ export function TipsPage() {
   return (
     <div className="animate-float-up" data-ace="1">
       <h1 className="text-2xl font-bold">Tip staf</h1>
+      {loading && <p className="mt-4 text-[var(--muted)]" role="status">Memuat tip…</p>}
+      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
       <div className="mt-6 space-y-2">
         {tips.map((t) => (
           <div key={t.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-2 text-sm">
             <div>
               <div className="font-medium">
-                {formatIdr(t.amount)} · {t.status} · {t.allocationMode}
+                {formatIdr(t.amount)} · <AceBadge tone={t.status === 'ALLOCATED' ? 'ok' : 'warn'}>{t.status}</AceBadge> · {t.allocationMode}
               </div>
               <div className="text-[var(--muted)]">
                 Order {t.order?.orderNumber || t.orderId?.slice?.(0, 8)} ·{' '}
@@ -86,7 +97,7 @@ export function TipsPage() {
             )}
           </div>
         ))}
-        {!tips.length && <p className="text-[var(--muted)]">Belum ada tip.</p>}
+        {!loading && !tips.length && !error && <EmptyState title="Belum ada tip." />}
       </div>
 
       {selected && (
@@ -96,6 +107,7 @@ export function TipsPage() {
             <div key={i} className="flex gap-2">
               <select
                 className="input flex-1"
+                aria-label={`Staf untuk split ${i + 1}`}
                 value={s.userId}
                 onChange={(e) => {
                   const next = [...splits];
@@ -116,6 +128,8 @@ export function TipsPage() {
               <input
                 className="input w-28"
                 type="number"
+                aria-label={`Jumlah split ${i + 1} dalam IDR`}
+                min={0}
                 value={s.amount}
                 onChange={(e) => {
                   const next = [...splits];
@@ -137,14 +151,14 @@ export function TipsPage() {
             {formatIdr(selected.amount)})
           </p>
           <div className="flex gap-2">
-            <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" onClick={allocate}>
-              Simpan
+            <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" disabled={busy} onClick={allocate}>
+              {busy ? 'Menyimpan…' : 'Simpan'}
             </button>
-            <button className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold" type="button" onClick={() => setSelected(null)}>
+            <button className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold" type="button" disabled={busy} onClick={() => setSelected(null)}>
               Batal
             </button>
           </div>
-          {msg && <p className="text-sm">{msg}</p>}
+          {msg && <p className="text-sm" role="status">{msg}</p>}
         </div>
       )}
     </div>

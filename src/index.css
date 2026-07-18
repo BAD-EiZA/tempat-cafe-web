@@ -39,6 +39,18 @@ button {
   font: inherit;
 }
 
+button,
+[role='button'] {
+  min-height: 44px;
+}
+
+button:focus-visible,
+.btn:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 input,
 select,
 textarea {

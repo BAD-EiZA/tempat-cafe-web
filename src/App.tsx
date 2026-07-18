@@ -1,37 +1,40 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { LandingPage } from './pages/LandingPage';
-import { PublicCafePage } from './pages/public/PublicCafePage';
-import { PublicMenuPage } from './pages/public/PublicMenuPage';
-import { QrEntryPage } from './pages/public/QrEntryPage';
-import { CheckoutPage } from './pages/public/CheckoutPage';
-import { OrderTrackPage } from './pages/public/OrderTrackPage';
-import { ReservationPage } from './pages/public/ReservationPage';
-import { MerchantLayout } from './pages/app/MerchantLayout';
-import { DashboardPage } from './pages/app/DashboardPage';
-import { OnboardingPage } from './pages/app/OnboardingPage';
-import { MenuManagePage } from './pages/app/MenuManagePage';
-import { TablesManagePage } from './pages/app/TablesManagePage';
-import { HomepageBuilderPage } from './pages/app/HomepageBuilderPage';
-import { ReportsPage } from './pages/app/ReportsPage';
-import { CustomersPage } from './pages/app/CustomersPage';
-import { PromoPage } from './pages/app/PromoPage';
-import { LedgerPage } from './pages/app/LedgerPage';
-import { PrintersPage } from './pages/app/PrintersPage';
-import { ReservationsManagePage } from './pages/app/ReservationsManagePage';
-import { FeedbackPage } from './pages/app/FeedbackPage';
-import { StaffPage } from './pages/app/StaffPage';
-import { TipsPage } from './pages/app/TipsPage';
-import { RefundsPage } from './pages/app/RefundsPage';
-import { PosPage } from './pages/pos/PosPage';
-import { KdsPage } from './pages/kds/KdsPage';
-import { WaiterPage } from './pages/waiter/WaiterPage';
-import { PlatformPage } from './pages/platform/PlatformPage';
-import { MemberPage } from './pages/member/MemberPage';
 import { Protected } from './components/Protected';
+
+const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
+const PublicCafePage = lazy(() => import('./pages/public/PublicCafePage').then((module) => ({ default: module.PublicCafePage })));
+const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage').then((module) => ({ default: module.PublicMenuPage })));
+const QrEntryPage = lazy(() => import('./pages/public/QrEntryPage').then((module) => ({ default: module.QrEntryPage })));
+const CheckoutPage = lazy(() => import('./pages/public/CheckoutPage').then((module) => ({ default: module.CheckoutPage })));
+const OrderTrackPage = lazy(() => import('./pages/public/OrderTrackPage').then((module) => ({ default: module.OrderTrackPage })));
+const ReservationPage = lazy(() => import('./pages/public/ReservationPage').then((module) => ({ default: module.ReservationPage })));
+const MerchantLayout = lazy(() => import('./pages/app/MerchantLayout').then((module) => ({ default: module.MerchantLayout })));
+const DashboardPage = lazy(() => import('./pages/app/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const OnboardingPage = lazy(() => import('./pages/app/OnboardingPage').then((module) => ({ default: module.OnboardingPage })));
+const MenuManagePage = lazy(() => import('./pages/app/MenuManagePage').then((module) => ({ default: module.MenuManagePage })));
+const TablesManagePage = lazy(() => import('./pages/app/TablesManagePage').then((module) => ({ default: module.TablesManagePage })));
+const HomepageBuilderPage = lazy(() => import('./pages/app/HomepageBuilderPage').then((module) => ({ default: module.HomepageBuilderPage })));
+const ReportsPage = lazy(() => import('./pages/app/ReportsPage').then((module) => ({ default: module.ReportsPage })));
+const CustomersPage = lazy(() => import('./pages/app/CustomersPage').then((module) => ({ default: module.CustomersPage })));
+const PromoPage = lazy(() => import('./pages/app/PromoPage').then((module) => ({ default: module.PromoPage })));
+const LedgerPage = lazy(() => import('./pages/app/LedgerPage').then((module) => ({ default: module.LedgerPage })));
+const PrintersPage = lazy(() => import('./pages/app/PrintersPage').then((module) => ({ default: module.PrintersPage })));
+const ReservationsManagePage = lazy(() => import('./pages/app/ReservationsManagePage').then((module) => ({ default: module.ReservationsManagePage })));
+const FeedbackPage = lazy(() => import('./pages/app/FeedbackPage').then((module) => ({ default: module.FeedbackPage })));
+const StaffPage = lazy(() => import('./pages/app/StaffPage').then((module) => ({ default: module.StaffPage })));
+const TipsPage = lazy(() => import('./pages/app/TipsPage').then((module) => ({ default: module.TipsPage })));
+const RefundsPage = lazy(() => import('./pages/app/RefundsPage').then((module) => ({ default: module.RefundsPage })));
+const PosPage = lazy(() => import('./pages/pos/PosPage').then((module) => ({ default: module.PosPage })));
+const KdsPage = lazy(() => import('./pages/kds/KdsPage').then((module) => ({ default: module.KdsPage })));
+const WaiterPage = lazy(() => import('./pages/waiter/WaiterPage').then((module) => ({ default: module.WaiterPage })));
+const PlatformPage = lazy(() => import('./pages/platform/PlatformPage').then((module) => ({ default: module.PlatformPage })));
+const MemberPage = lazy(() => import('./pages/member/MemberPage').then((module) => ({ default: module.MemberPage })));
 
 export function App() {
   return (
-    <Routes>
+    <Suspense fallback={<div role="status" aria-live="polite">Loading page...</div>}>
+      <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/c/:cafeSlug" element={<PublicCafePage />} />
       <Route path="/c/:cafeSlug/menu" element={<PublicMenuPage />} />
@@ -99,7 +102,8 @@ export function App() {
           </Protected>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

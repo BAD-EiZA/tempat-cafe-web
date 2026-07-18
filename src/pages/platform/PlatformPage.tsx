@@ -11,6 +11,7 @@ import { AceTabs } from '@/components/ui/tabs';
 import { BentoGrid, BentoGridItem } from '@/components/ui/bento-grid';
 import { FloatingNavbar } from '@/components/ui/floating-navbar';
 import { Loader } from '@/components/ui/loader';
+import { statusLabel } from '@/components/ace/OpsFeedback';
 
 export function PlatformPage() {
   const api = useApi();
@@ -25,6 +26,7 @@ export function PlatformPage() {
   const [recon, setRecon] = useState<any[]>([]);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -46,25 +48,57 @@ export function PlatformPage() {
   }, [api, tab, isAuthenticated]);
 
   async function setStatus(id: string, status: string) {
-    await api(`/platform/merchants/${id}/status`, { method: 'PATCH', body: { status } });
-    setMerchants(await api<any[]>('/platform/merchants'));
+    if (pendingAction) return;
+    const merchant = merchants.find((m) => m.id === id);
+    const action = status === 'APPROVED' ? 'menyetujui' : 'menangguhkan';
+    if (!window.confirm(`Konfirmasi ${action} merchant ${merchant?.name || id}?`)) return;
+    const reason = status === 'SUSPENDED' ? window.prompt('Alasan penangguhan:')?.trim() : undefined;
+    if (status === 'SUSPENDED' && !reason) return;
+    setPendingAction(`status:${id}`);
+    setErr('');
+    try {
+      await api(`/platform/merchants/${id}/status`, { method: 'PATCH', body: { status, reason } });
+      setMerchants(await api<any[]>('/platform/merchants'));
+    } catch (e: any) {
+      setErr(e.message || `Gagal ${action} merchant`);
+    } finally {
+      setPendingAction('');
+    }
   }
 
   async function runRecon() {
-    await api('/platform/reconciliation/run', { method: 'POST' });
-    setRecon(await api<any[]>('/platform/reconciliation'));
+    if (pendingAction || !window.confirm('Jalankan rekonsiliasi 7 hari terakhir?')) return;
+    setPendingAction('recon');
+    setErr('');
+    try {
+      await api('/platform/reconciliation/run', { method: 'POST' });
+      setRecon(await api<any[]>('/platform/reconciliation'));
+    } catch (e: any) {
+      setErr(e.message || 'Rekonsiliasi gagal');
+    } finally {
+      setPendingAction('');
+    }
   }
 
   async function impersonate(id: string) {
-    const res = await api<any>(`/platform/impersonate/${id}`, { method: 'POST' });
-    const orgId = res?.organizationId || id;
+    if (pendingAction) return;
+    const merchant = merchants.find((m) => m.id === id);
+    if (!window.confirm(`Masuk sebagai merchant ${merchant?.name || id}? Semua aksi akan diaudit.`)) return;
+    setPendingAction(`impersonate:${id}`);
     try {
-      const branches = await api<any[]>(`/branches?organizationId=${orgId}`);
-      setTenant(orgId, branches[0]?.id || '');
-    } catch {
-      setTenant(orgId, '');
+      const res = await api<any>(`/platform/impersonate/${id}`, { method: 'POST' });
+      const orgId = res?.organizationId || id;
+      try {
+        const branches = await api<any[]>(`/branches?organizationId=${orgId}`);
+        setTenant(orgId, branches[0]?.id || '');
+      } catch {
+        setTenant(orgId, '');
+      }
+      nav('/app');
+    } catch (e: any) {
+      setErr(e.message || 'Impersonate gagal');
+      setPendingAction('');
     }
-    nav('/app');
   }
 
   if (!isAuthenticated) {
@@ -102,11 +136,11 @@ export function PlatformPage() {
         <AceTabs
           className="mt-4"
           tabs={[
-            { id: 'merchants', label: 'merchants' },
-            { id: 'payments', label: 'payments' },
-            { id: 'metrics', label: 'metrics' },
-            { id: 'audit', label: 'audit' },
-            { id: 'recon', label: 'recon' },
+            { id: 'merchants', label: 'Merchant' },
+            { id: 'payments', label: 'Pembayaran' },
+            { id: 'metrics', label: 'Metrik' },
+            { id: 'audit', label: 'Audit' },
+            { id: 'recon', label: 'Rekonsiliasi' },
           ]}
           value={tab}
           onChange={setTab}
@@ -126,18 +160,18 @@ export function PlatformPage() {
                 <div>
                   <div className="font-medium">{m.name}</div>
                   <div className="text-sm text-[#6b6b6b]">
-                    {m.slug} · {m.status}
+                    {m.slug} · {statusLabel(m.status)}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <AceButton variant="accent" className="!text-sm" onClick={() => setStatus(m.id, 'APPROVED')}>
-                    Approve
+                <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
+                  <AceButton variant="accent" className="!text-sm" disabled={!!pendingAction} onClick={() => setStatus(m.id, 'APPROVED')}>
+                    {pendingAction === `status:${m.id}` ? 'Memproses...' : 'Setujui'}
                   </AceButton>
-                  <AceButton variant="ghost" className="!text-sm" onClick={() => setStatus(m.id, 'SUSPENDED')}>
-                    Suspend
+                  <AceButton variant="ghost" className="!text-sm" disabled={!!pendingAction} onClick={() => setStatus(m.id, 'SUSPENDED')}>
+                    {pendingAction === `status:${m.id}` ? 'Memproses...' : 'Tangguhkan'}
                   </AceButton>
-                  <AceButton variant="primary" className="!text-sm" onClick={() => impersonate(m.id)}>
-                    Impersonate
+                  <AceButton variant="primary" className="!text-sm" disabled={!!pendingAction} onClick={() => impersonate(m.id)}>
+                    {pendingAction === `impersonate:${m.id}` ? 'Memproses...' : 'Masuk sebagai'}
                   </AceButton>
                 </div>
               </AceCard>
@@ -149,9 +183,9 @@ export function PlatformPage() {
         {tab === 'payments' && !loading && (
           <div className="mt-6 space-y-2">
             {payments.map((p) => (
-              <AceCard key={p.id} className="flex justify-between text-sm">
+              <AceCard key={p.id} className="flex flex-col gap-2 text-sm sm:flex-row sm:justify-between">
                 <span>
-                  {p.id.slice(0, 8)}… · {p.status} · {p.method || '—'}
+                  {p.id.slice(0, 8)}... · {statusLabel(p.status)} · {p.method || '-'}
                 </span>
                 <span className="font-semibold">{formatIdr(p.amount ?? 0)}</span>
               </AceCard>
@@ -188,14 +222,14 @@ export function PlatformPage() {
 
         {tab === 'recon' && !loading && (
           <div className="mt-6">
-            <AceButton variant="primary" className="mb-4" onClick={runRecon}>
-              Run recon (7 hari)
+            <AceButton variant="primary" className="mb-4" disabled={!!pendingAction} onClick={runRecon}>
+               {pendingAction === 'recon' ? 'Menjalankan...' : 'Jalankan rekonsiliasi (7 hari)'}
             </AceButton>
             <div className="space-y-2">
               {recon.map((r) => (
-                <AceCard key={r.id} className="flex justify-between text-sm">
+                <AceCard key={r.id} className="flex flex-col gap-2 text-sm sm:flex-row sm:justify-between">
                   <span>
-                    {r.status} · {r.providerTxId || r.paymentId?.slice?.(0, 8) || r.id.slice(0, 8)}
+                    {statusLabel(r.status)} · {r.providerTxId || r.paymentId?.slice?.(0, 8) || r.id.slice(0, 8)}
                   </span>
                   <span>{formatIdr(r.internalAmount ?? r.amount ?? 0)}</span>
                 </AceCard>

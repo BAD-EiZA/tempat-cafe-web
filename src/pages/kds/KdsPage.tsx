@@ -8,12 +8,18 @@ import { OpsShell } from '@/components/ace/OpsShell';
 import { AceButton } from '@/components/ace/AceButton';
 import { AceSelect } from '@/components/ace/AceInput';
 import { GlareCard } from '@/components/ui/glare-card';
+import { ActionError, ConnectionStatus, statusLabel } from '@/components/ace/OpsFeedback';
 
-const NEXT: Record<string, string> = {
-  QUEUED: 'IN_PROGRESS',
-  IN_PROGRESS: 'READY',
-  READY: 'BUMPED',
+type KitchenStatus = 'QUEUED' | 'ACKNOWLEDGED' | 'PREPARING' | 'READY' | 'SERVED';
+
+const NEXT: Partial<Record<KitchenStatus, KitchenStatus>> = {
+  QUEUED: 'ACKNOWLEDGED',
+  ACKNOWLEDGED: 'PREPARING',
+  PREPARING: 'READY',
+  READY: 'SERVED',
 };
+
+const COLUMNS: KitchenStatus[] = ['QUEUED', 'ACKNOWLEDGED', 'PREPARING', 'READY'];
 
 export function KdsPage() {
   const api = useApi();
@@ -23,6 +29,10 @@ export function KdsPage() {
   const [prevCount, setPrevCount] = useState(0);
   const [stationFilter, setStationFilter] = useState('');
   const [stations, setStations] = useState<any[]>([]);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [busyId, setBusyId] = useState('');
 
   useEffect(() => {
     if (branchId) return;
@@ -47,7 +57,8 @@ export function KdsPage() {
   const load = useCallback(async () => {
     if (!branchId) return;
     const q = stationFilter ? `&stationId=${stationFilter}` : '';
-    const list = await api<any[]>(`/kitchen/tickets?branchId=${branchId}${q}`);
+    try {
+      const list = await api<any[]>(`/kitchen/tickets?branchId=${branchId}${q}`);
     setTickets((prev) => {
       if (list.length > prev.length && prev.length > 0) {
         try {
@@ -66,7 +77,12 @@ export function KdsPage() {
       }
       return list;
     });
-    setPrevCount(list.length);
+      setPrevCount(list.length);
+      setLastSync(new Date());
+      setLoadError('');
+    } catch (e: any) {
+      setLoadError(e.message || 'Data dapur gagal dimuat');
+    }
   }, [api, branchId, stationFilter]);
 
   useEffect(() => {
@@ -79,14 +95,20 @@ export function KdsPage() {
     load().catch(() => undefined);
   });
 
-  async function advance(id: string, status: string) {
+  async function advance(id: string, status: KitchenStatus) {
     const next = NEXT[status];
-    if (!next) return;
-    await api(`/kitchen/tickets/${id}/status`, { method: 'PATCH', body: { status: next } });
-    await load();
+    if (!next || busyId) return;
+    setBusyId(id);
+    setActionError('');
+    try {
+      await api(`/kitchen/tickets/${id}/status`, { method: 'PATCH', body: { status: next } });
+      await load();
+    } catch (e: any) {
+      setActionError(e.message || 'Status tiket gagal diubah');
+    } finally {
+      setBusyId('');
+    }
   }
-
-  const columns = ['QUEUED', 'IN_PROGRESS', 'READY'];
 
   return (
     <OpsShell>
@@ -94,13 +116,14 @@ export function KdsPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold">KDS</h1>
           <div className="flex items-center gap-2 text-black">
-            <span className="text-xs text-white/50">SSE {connected ? 'on' : 'off'}</span>
             <TenantSwitcher />
             <AceButton as={Link} to="/app" variant="ghost" className="!border-white/20 !text-white !text-sm">
               Merchant
             </AceButton>
           </div>
         </div>
+        <ConnectionStatus connected={connected} lastSync={lastSync} error={loadError} onRetry={() => load()} />
+        <ActionError message={actionError} />
         <AceSelect
           className="mb-3 max-w-xs !bg-white/5 !text-white !border-white/20"
           value={stationFilter}
@@ -113,10 +136,10 @@ export function KdsPage() {
             </option>
           ))}
         </AceSelect>
-        <div className="grid gap-3 md:grid-cols-3">
-          {columns.map((col) => (
+        <div className="grid gap-3 md:grid-cols-4">
+          {COLUMNS.map((col) => (
             <div key={col}>
-              <h2 className="mb-2 text-sm font-bold tracking-wide text-white/50">{col}</h2>
+              <h2 className="mb-2 text-sm font-bold tracking-wide text-white/50">{statusLabel(col)}</h2>
               <div className="space-y-2">
                 {tickets
                   .filter((t) => t.status === col)
@@ -124,7 +147,6 @@ export function KdsPage() {
                     <GlareCard
                       key={t.id}
                       className="w-full !border-white/10 !bg-white/5 !text-white"
-                      onClick={() => advance(t.id, t.status)}
                     >
                       <div className="flex justify-between text-sm">
                         <span className="font-bold">{t.order?.orderNumber || t.orderId?.slice(0, 6)}</span>
@@ -137,7 +159,14 @@ export function KdsPage() {
                           </li>
                         ))}
                       </ul>
-                      <p className="mt-2 text-xs text-white/40">Tap → {NEXT[t.status] || 'done'}</p>
+                      <AceButton
+                        variant="accent"
+                        className="mt-3 w-full"
+                        disabled={!!busyId}
+                        onClick={() => advance(t.id, t.status as KitchenStatus)}
+                      >
+                        {busyId === t.id ? 'Memproses...' : `Tandai ${statusLabel(NEXT[t.status as KitchenStatus])}`}
+                      </AceButton>
                     </GlareCard>
                   ))}
               </div>
