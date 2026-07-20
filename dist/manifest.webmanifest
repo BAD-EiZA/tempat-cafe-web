@@ -1,1 +1,1 @@
-{"name":"Cafe Platform","short_name":"Cafe","start_url":"/","display":"standalone","background_color":"#ffffff","theme_color":"#1a1a1a","lang":"en","scope":"/","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{"name":"Tempat Kafe","short_name":"Tempat Kafe","description":"QR order, POS, dan dapur untuk kafe Indonesia.","start_url":"/","display":"standalone","background_color":"#f4f1ea","theme_color":"#1b4332","lang":"id","scope":"/","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

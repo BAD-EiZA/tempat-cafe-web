@@ -1,1 +1,0 @@
-import{j as t,c as d}from"./index-N9W84NMm.js";import{G as i}from"./glare-card-BgKUsNoB.js";function x({children:r,className:e,glare:a,onClick:o,role:s}){return a||o?t.jsx(i,{className:e,onClick:o,role:s,children:r}):t.jsx("div",{role:s,className:d("rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm transition hover:border-[#c4a574]/40",e),children:r})}export{x as A};

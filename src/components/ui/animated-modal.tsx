@@ -73,7 +73,7 @@ export function AnimatedModal({
         aria-label={title ? undefined : 'Dialog'}
         tabIndex={-1}
         className={cn(
-          'animate-float-up relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-[#e8e4de] bg-white p-5 shadow-2xl outline-none',
+          'animate-float-up relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-2xl outline-none',
           className,
         )}
       >

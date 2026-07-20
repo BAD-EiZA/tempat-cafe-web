@@ -40,6 +40,8 @@ export function App() {
       <Route path="/c/:cafeSlug/menu" element={<PublicMenuPage />} />
       <Route path="/c/:cafeSlug/reservation" element={<ReservationPage />} />
       <Route path="/c/:cafeSlug/:branchSlug" element={<PublicCafePage />} />
+      <Route path="/c/:cafeSlug/:branchSlug/menu" element={<PublicMenuPage />} />
+      <Route path="/c/:cafeSlug/:branchSlug/reservation" element={<ReservationPage />} />
       <Route path="/qr/:token" element={<QrEntryPage />} />
       <Route path="/checkout" element={<CheckoutPage />} />
       <Route path="/order/:publicToken" element={<OrderTrackPage />} />
@@ -94,15 +96,9 @@ export function App() {
           </Protected>
         }
       />
-      <Route
-        path="/platform/*"
-        element={
-          <Protected>
-            <PlatformPage />
-          </Protected>
-        }
-      />
-        <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Platform handles its own auth UI; Protected would hide login gate */}
+      <Route path="/platform/*" element={<PlatformPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
   );

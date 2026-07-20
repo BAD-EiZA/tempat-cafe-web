@@ -1,37 +1,67 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AceButton } from '@/components/ace/AceButton';
+import { AceInput, AceSelect, AceTextarea } from '@/components/ace/AceInput';
+import { EmptyState, AceBadge } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
+import { Loader } from '@/components/ui/loader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
+import {
+  DEFAULT_DESIGN,
+  DEFAULT_SECTIONS,
+  SECTION_LABELS,
+  SECTION_TYPES,
+  emptySectionContent,
+} from '@/lib/homepageDefaults';
+import { CafeSections } from '@/components/cafe/CafeSections';
+import { cn } from '@/lib/utils';
 
-const SECTION_TYPES = [
-  'hero',
-  'about',
-  'featured_menu',
-  'promo',
-  'gallery',
-  'hours',
-  'location',
-  'facilities',
-  'testimonial',
-  'cta',
-  'social',
-];
+function sectionLabel(type: string) {
+  return SECTION_LABELS[type] || type.replace(/_/g, ' ');
+}
 
-const DEFAULT_DESIGN = {
-  primaryColor: '#1a1a1a',
-  secondaryColor: '#c4a574',
-  font: 'Inter',
-};
+function DraftPreview({
+  title,
+  design,
+  sections,
+  mobile,
+}: {
+  title: string;
+  design: typeof DEFAULT_DESIGN;
+  sections: any[];
+  mobile: boolean;
+}) {
+  const primary = design.primaryColor || '#1b4332';
 
-const DEFAULT_SECTIONS = [
-  { type: 'hero', content: { title: '', subtitle: '', imageUrl: '' } },
-  { type: 'about', content: { body: '' } },
-  { type: 'hours', content: { text: 'Sen-Min 08:00-22:00' } },
-  { type: 'location', content: { address: '', mapsUrl: '' } },
-  { type: 'facilities', content: { items: 'WiFi, AC, Outdoor' } },
-  { type: 'gallery', content: { urls: '' } },
-  { type: 'cta', content: { menuLabel: 'Lihat Menu', reservationLabel: 'Reservasi' } },
-  { type: 'social', content: { instagram: '', whatsapp: '' } },
-];
+  return (
+    <div
+      className={cn(
+        'mx-auto overflow-hidden rounded-2xl border border-cafe-border bg-cafe-bg shadow-sm',
+        mobile ? 'max-w-[390px]' : 'max-w-full',
+      )}
+      style={{ fontFamily: design.font || 'inherit' }}
+    >
+      <div
+        className="border-b border-cafe-border bg-cafe-card px-4 py-3 text-sm font-bold"
+        style={{ color: primary }}
+      >
+        {title || 'Homepage'}
+      </div>
+      <div className="p-4">
+        <CafeSections
+          mode="preview"
+          compact
+          sections={sections}
+          pageTitle={title}
+          brandName={title}
+          primaryColor={design.primaryColor}
+          accentColor={design.secondaryColor}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function HomepageBuilderPage() {
   const api = useApi();
@@ -126,16 +156,16 @@ export function HomepageBuilderPage() {
     setMessage(null);
     try {
       await api(`/homepage/${selected}/draft`, {
-      method: 'POST',
-      body: {
-        design,
-        seo,
-        sections: sections.map((s) => ({
-          type: s.type,
-          content: s.content,
-          visible: s.visible !== false,
-        })),
-      },
+        method: 'POST',
+        body: {
+          design,
+          seo,
+          sections: sections.map((s) => ({
+            type: s.type,
+            content: s.content,
+            visible: s.visible !== false,
+          })),
+        },
       });
       setDirty(false);
       await load();
@@ -170,17 +200,19 @@ export function HomepageBuilderPage() {
   }
 
   function addSection(type: string) {
-    edit(() => setSections((prev) => [...prev, { type, content: {} }]));
+    edit(() => setSections((prev) => [...prev, { type, content: emptySectionContent(type) }]));
   }
 
   function moveSection(i: number, dir: -1 | 1) {
-    edit(() => setSections((prev) => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    }));
+    edit(() =>
+      setSections((prev) => {
+        const j = i + dir;
+        if (j < 0 || j >= prev.length) return prev;
+        const next = [...prev];
+        [next[i], next[j]] = [next[j], next[i]];
+        return next;
+      }),
+    );
   }
 
   function selectPage(id: string) {
@@ -220,10 +252,15 @@ export function HomepageBuilderPage() {
         },
       });
       if (sectionIndex != null) {
-        updateSection(sectionIndex, {
-          ...sections[sectionIndex].content,
-          imageUrl: data.secure_url,
-        });
+        edit(() =>
+          setSections((prev) =>
+            prev.map((s, idx) =>
+              idx === sectionIndex
+                ? { ...s, content: { ...(s.content || {}), imageUrl: data.secure_url } }
+                : s,
+            ),
+          ),
+        );
       }
       setUploadMsg(`OK: ${data.secure_url}`);
     } catch (err: any) {
@@ -232,287 +269,394 @@ export function HomepageBuilderPage() {
     e.target.value = '';
   }
 
+  const selectedPage = pages.find((p) => p.id === selected);
+  const publicSlug = selectedPage?.slug;
+
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Homepage builder</h1>
-      {!organizationId && <p className="mt-4 text-[var(--muted)]">Pilih tenant di dashboard dulu.</p>}
+    <div className="animate-float-up space-y-6">
+      <PageHeader
+        title="Homepage builder"
+        description="Susun halaman publik kafe. Preview mengikuti tampilan tamu."
+        actions={
+          selected ? (
+            <>
+              <AceButton
+                variant="accent"
+                className="!text-sm"
+                disabled={!!busy}
+                onClick={() => void saveDraft()}
+              >
+                {busy === 'save' ? 'Menyimpan…' : dirty ? 'Simpan draft *' : 'Simpan draft'}
+              </AceButton>
+              <AceButton
+                variant="primary"
+                className="!text-sm"
+                disabled={!!busy}
+                onClick={() => void publish()}
+              >
+                {busy === 'publish' ? 'Publishing…' : 'Publish'}
+              </AceButton>
+            </>
+          ) : undefined
+        }
+      />
+
+      {!organizationId && (
+        <EmptyState title="Pilih tenant dulu" description="Gunakan switcher organisasi di atas." />
+      )}
+
       {message && (
-        <p role="status" className={`mt-4 rounded-xl border px-4 py-3 text-sm ${message.type === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}>
+        <p
+          role="status"
+          className={cn(
+            'rounded-xl border px-4 py-3 text-sm',
+            message.type === 'error'
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : 'border-green-200 bg-green-50 text-green-800',
+          )}
+        >
           {message.text}
         </p>
       )}
 
-      <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-6 max-w-md space-y-2" onSubmit={createPage}>
-        <h2 className="font-semibold">Halaman baru</h2>
-        <input
-          className="input"
-          placeholder="slug"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          required
-        />
-        <input
-          className="input"
-          placeholder="Judul"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" type="submit" disabled={!organizationId || !!busy}>
-          {busy === 'create' ? 'Membuat...' : 'Buat'}
-        </button>
-      </form>
+      {organizationId && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+          {/* Editor column */}
+          <div className="min-w-0 space-y-4">
+            <form
+              className="max-w-md space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm"
+              onSubmit={createPage}
+            >
+              <h2 className="text-sm font-bold text-cafe-ink">Halaman baru</h2>
+              <AceInput
+                label="Slug"
+                placeholder="demo-cafe"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                required
+              />
+              <AceInput
+                label="Judul"
+                placeholder="Nama di builder"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+              <AceButton type="submit" variant="primary" disabled={!organizationId || !!busy}>
+                {busy === 'create' ? 'Membuat…' : 'Buat halaman'}
+              </AceButton>
+            </form>
 
-      <div className="mt-6 max-w-md">
-        <label className="label">Pilih halaman</label>
-        <select className="input" value={selected} onChange={(e) => selectPage(e.target.value)} disabled={loading || !!busy}>
-          <option value="">—</option>
-          {pages.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.slug} {p.publishedVersionId ? '(published)' : ''}
-            </option>
-          ))}
-        </select>
-        {loading && <p className="mt-2 text-sm text-[var(--muted)]">Memuat homepage...</p>}
-      </div>
-
-      <div className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-4 max-w-xl space-y-2">
-        <h2 className="font-semibold">Desain & SEO</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            className="input"
-            type="color"
-            value={design.primaryColor}
-            onChange={(e) => edit(() => setDesign({ ...design, primaryColor: e.target.value }))}
-          />
-          <input
-            className="input"
-            type="color"
-            value={design.secondaryColor}
-            onChange={(e) => edit(() => setDesign({ ...design, secondaryColor: e.target.value }))}
-          />
-        </div>
-        <input
-          className="input"
-          placeholder="SEO title"
-          value={seo.title}
-          onChange={(e) => edit(() => setSeo({ ...seo, title: e.target.value }))}
-        />
-        <input
-          className="input"
-          placeholder="SEO description"
-          value={seo.description}
-          onChange={(e) => edit(() => setSeo({ ...seo, description: e.target.value }))}
-        />
-      </div>
-
-      <div className="mt-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <select
-            className="input max-w-xs"
-            defaultValue=""
-            onChange={(e) => {
-              if (e.target.value) {
-                addSection(e.target.value);
-                e.target.value = '';
-              }
-            }}
-          >
-            <option value="">+ Section</option>
-            {SECTION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {sections.map((s, i) => (
-          <div key={i} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm max-w-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">{s.type}</span>
-              <div className="flex gap-1">
-                <button type="button" className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold !py-1 text-xs" onClick={() => moveSection(i, -1)}>
-                  ↑
-                </button>
-                <button type="button" className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold !py-1 text-xs" onClick={() => moveSection(i, 1)}>
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold !py-1 text-xs"
-                  onClick={() => edit(() => setSections((prev) => prev.filter((_, j) => j !== i)))}
-                >
-                  Hapus
-                </button>
-              </div>
+            <div className="max-w-md space-y-2">
+              <AceSelect
+                label="Pilih halaman"
+                value={selected}
+                onChange={(e) => selectPage(e.target.value)}
+                disabled={loading || !!busy}
+              >
+                <option value="">-</option>
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.slug} {p.publishedVersionId ? '(published)' : ''}
+                  </option>
+                ))}
+              </AceSelect>
+              {loading && <Loader label="Memuat homepage…" />}
+              {publicSlug && (
+                <p className="text-sm text-cafe-muted">
+                  Publik:{' '}
+                  <Link className="font-semibold text-cafe-forest-mid underline" to={`/c/${publicSlug}`}>
+                    /c/{publicSlug}
+                  </Link>
+                </p>
+              )}
             </div>
-            {s.type === 'hero' && (
+
+            {selected && (
               <>
-                <input
-                  className="input"
-                  placeholder="Title"
-                  value={s.content.title || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, title: e.target.value })}
-                />
-                <input
-                  className="input"
-                  placeholder="Subtitle"
-                  value={s.content.subtitle || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, subtitle: e.target.value })}
-                />
-                <label className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold cursor-pointer text-sm">
-                  Upload hero image
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e, i)} />
-                </label>
-                {s.content.imageUrl && (
-                  <img src={s.content.imageUrl} alt="" className="h-24 rounded object-cover" />
+                <div className="max-w-xl space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm">
+                  <h2 className="text-sm font-bold text-cafe-ink">Desain & SEO</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-cafe-muted">
+                        Warna utama
+                      </label>
+                      <input
+                        className="h-11 w-full cursor-pointer rounded-xl border border-cafe-border bg-cafe-card"
+                        type="color"
+                        value={design.primaryColor}
+                        onChange={(e) =>
+                          edit(() => setDesign({ ...design, primaryColor: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold text-cafe-muted">
+                        Aksen
+                      </label>
+                      <input
+                        className="h-11 w-full cursor-pointer rounded-xl border border-cafe-border bg-cafe-card"
+                        type="color"
+                        value={design.secondaryColor}
+                        onChange={(e) =>
+                          edit(() => setDesign({ ...design, secondaryColor: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <AceInput
+                    label="SEO title"
+                    value={seo.title}
+                    onChange={(e) => edit(() => setSeo({ ...seo, title: e.target.value }))}
+                  />
+                  <AceInput
+                    label="SEO description"
+                    value={seo.description}
+                    onChange={(e) => edit(() => setSeo({ ...seo, description: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <AceSelect
+                      label="Tambah section"
+                      containerClassName="min-w-[12rem]"
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          addSection(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                    >
+                      <option value="">Pilih tipe…</option>
+                      {SECTION_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {sectionLabel(t)}
+                        </option>
+                      ))}
+                    </AceSelect>
+                  </div>
+
+                  {sections.map((s, i) => (
+                    <div
+                      key={i}
+                      className="max-w-xl space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <AceBadge>{sectionLabel(s.type)}</AceBadge>
+                        <div className="flex gap-1">
+                          <AceButton
+                            type="button"
+                            variant="ghost"
+                            className="!min-h-9 !px-2.5 !py-1 !text-xs"
+                            onClick={() => moveSection(i, -1)}
+                          >
+                            ↑
+                          </AceButton>
+                          <AceButton
+                            type="button"
+                            variant="ghost"
+                            className="!min-h-9 !px-2.5 !py-1 !text-xs"
+                            onClick={() => moveSection(i, 1)}
+                          >
+                            ↓
+                          </AceButton>
+                          <AceButton
+                            type="button"
+                            variant="ghost"
+                            className="!min-h-9 !px-2.5 !py-1 !text-xs"
+                            onClick={() =>
+                              edit(() => setSections((prev) => prev.filter((_, j) => j !== i)))
+                            }
+                          >
+                            Hapus
+                          </AceButton>
+                        </div>
+                      </div>
+
+                      {s.type === 'hero' && (
+                        <>
+                          <AceInput
+                            label="Judul"
+                            value={s.content.title || ''}
+                            onChange={(e) => updateSection(i, { ...s.content, title: e.target.value })}
+                          />
+                          <AceInput
+                            label="Subjudul"
+                            value={s.content.subtitle || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, subtitle: e.target.value })
+                            }
+                          />
+                          <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-cafe-border px-4 py-2.5 text-sm font-semibold">
+                            Upload gambar hero
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => onFile(e, i)}
+                            />
+                          </label>
+                          {s.content.imageUrl && (
+                            <img
+                              src={s.content.imageUrl}
+                              alt=""
+                              className="h-24 rounded-xl object-cover"
+                            />
+                          )}
+                        </>
+                      )}
+                      {s.type === 'about' && (
+                        <AceTextarea
+                          label="Tentang"
+                          className="min-h-24"
+                          value={s.content.body || ''}
+                          onChange={(e) => updateSection(i, { ...s.content, body: e.target.value })}
+                        />
+                      )}
+                      {s.type === 'hours' && (
+                        <AceInput
+                          label="Jam"
+                          value={s.content.text || ''}
+                          onChange={(e) => updateSection(i, { ...s.content, text: e.target.value })}
+                        />
+                      )}
+                      {s.type === 'location' && (
+                        <>
+                          <AceInput
+                            label="Alamat"
+                            value={s.content.address || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, address: e.target.value })
+                            }
+                          />
+                          <AceInput
+                            label="Google Maps URL"
+                            value={s.content.mapsUrl || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, mapsUrl: e.target.value })
+                            }
+                          />
+                        </>
+                      )}
+                      {s.type === 'facilities' && (
+                        <AceInput
+                          label="Fasilitas (pisah koma)"
+                          placeholder="WiFi, AC, Outdoor"
+                          value={s.content.items || ''}
+                          onChange={(e) => updateSection(i, { ...s.content, items: e.target.value })}
+                        />
+                      )}
+                      {s.type === 'gallery' && (
+                        <AceInput
+                          label="URL gambar (pisah koma)"
+                          value={s.content.urls || ''}
+                          onChange={(e) => updateSection(i, { ...s.content, urls: e.target.value })}
+                        />
+                      )}
+                      {s.type === 'testimonial' && (
+                        <>
+                          <AceTextarea
+                            label="Kutipan"
+                            className="min-h-16"
+                            value={s.content.quote || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, quote: e.target.value })
+                            }
+                          />
+                          <AceInput
+                            label="Nama (opsional)"
+                            value={s.content.author || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, author: e.target.value })
+                            }
+                          />
+                        </>
+                      )}
+                      {s.type === 'cta' && (
+                        <>
+                          <AceInput
+                            label="Label menu"
+                            value={s.content.menuLabel || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, menuLabel: e.target.value })
+                            }
+                          />
+                          <AceInput
+                            label="Label reservasi"
+                            value={s.content.reservationLabel || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, reservationLabel: e.target.value })
+                            }
+                          />
+                        </>
+                      )}
+                      {s.type === 'social' && (
+                        <>
+                          <AceInput
+                            label="Instagram URL"
+                            value={s.content.instagram || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, instagram: e.target.value })
+                            }
+                          />
+                          <AceInput
+                            label="WhatsApp"
+                            value={s.content.whatsapp || ''}
+                            onChange={(e) =>
+                              updateSection(i, { ...s.content, whatsapp: e.target.value })
+                            }
+                          />
+                        </>
+                      )}
+                      {['featured_menu', 'promo'].includes(s.type) && (
+                        <p className="text-xs text-cafe-muted">
+                          Ditampilkan dari data menu/promo aktif saat publish.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-cafe-border px-4 py-2.5 text-sm font-semibold">
+                    Upload media
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e)} />
+                  </label>
+                </div>
+                {uploadMsg && (
+                  <p className="break-all text-xs text-cafe-muted">{uploadMsg}</p>
                 )}
               </>
             )}
-            {s.type === 'about' && (
-              <textarea
-                className="input min-h-24"
-                placeholder="About"
-                value={s.content.body || ''}
-                onChange={(e) => updateSection(i, { ...s.content, body: e.target.value })}
-              />
-            )}
-            {s.type === 'hours' && (
-              <input
-                className="input"
-                value={s.content.text || ''}
-                onChange={(e) => updateSection(i, { ...s.content, text: e.target.value })}
-              />
-            )}
-            {s.type === 'location' && (
-              <>
-                <input
-                  className="input"
-                  placeholder="Alamat"
-                  value={s.content.address || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, address: e.target.value })}
-                />
-                <input
-                  className="input"
-                  placeholder="Google Maps URL"
-                  value={s.content.mapsUrl || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, mapsUrl: e.target.value })}
-                />
-              </>
-            )}
-            {s.type === 'facilities' && (
-              <input
-                className="input"
-                placeholder="WiFi, AC, …"
-                value={s.content.items || ''}
-                onChange={(e) => updateSection(i, { ...s.content, items: e.target.value })}
-              />
-            )}
-            {s.type === 'gallery' && (
-              <input
-                className="input"
-                placeholder="URL gambar, pisah koma"
-                value={s.content.urls || ''}
-                onChange={(e) => updateSection(i, { ...s.content, urls: e.target.value })}
-              />
-            )}
-            {s.type === 'testimonial' && (
-              <textarea
-                className="input min-h-16"
-                placeholder="Kutipan testimonial"
-                value={s.content.quote || ''}
-                onChange={(e) => updateSection(i, { ...s.content, quote: e.target.value })}
-              />
-            )}
-            {s.type === 'cta' && (
-              <>
-                <input
-                  className="input"
-                  placeholder="Label menu"
-                  value={s.content.menuLabel || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, menuLabel: e.target.value })}
-                />
-                <input
-                  className="input"
-                  placeholder="Label reservasi"
-                  value={s.content.reservationLabel || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, reservationLabel: e.target.value })}
-                />
-              </>
-            )}
-            {s.type === 'social' && (
-              <>
-                <input
-                  className="input"
-                  placeholder="Instagram URL"
-                  value={s.content.instagram || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, instagram: e.target.value })}
-                />
-                <input
-                  className="input"
-                  placeholder="WhatsApp"
-                  value={s.content.whatsapp || ''}
-                  onChange={(e) => updateSection(i, { ...s.content, whatsapp: e.target.value })}
-                />
-              </>
-            )}
-            {['featured_menu', 'promo'].includes(s.type) && (
-              <p className="text-xs text-[var(--muted)]">Ditampilkan dari data menu/promo aktif saat publish.</p>
-            )}
           </div>
-        ))}
-      </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="button" onClick={() => void saveDraft()} disabled={!selected || !!busy}>
-          {busy === 'save' ? 'Menyimpan...' : dirty ? 'Simpan draft *' : 'Simpan draft'}
-        </button>
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" type="button" onClick={publish} disabled={!selected || !!busy}>
-          {busy === 'publish' ? 'Publishing...' : 'Publish'}
-        </button>
-        <label className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold cursor-pointer">
-          Upload media
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e)} />
-        </label>
-      </div>
-      {uploadMsg && <p className="mt-2 break-all text-xs text-[var(--muted)]">{uploadMsg}</p>}
-
-      {selected && (
-        <p className="mt-4 text-sm text-[var(--muted)]">
-          Public:{' '}
-          <a className="underline" href={`/c/${pages.find((p) => p.id === selected)?.slug}`}>
-            /c/{pages.find((p) => p.id === selected)?.slug}
-          </a>
-        </p>
-      )}
-
-      {selected && (
-        <section className="mt-6 max-w-3xl" aria-label="Preview draft">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="font-semibold">Preview draft</h2>
-            <button type="button" className="rounded-lg border border-[#d4d0c8] px-3 py-1 text-xs font-semibold" onClick={() => setPreviewMobile((value) => !value)}>
-              {previewMobile ? 'Desktop' : 'Mobile'}
-            </button>
-          </div>
-          <div className={`mx-auto overflow-hidden rounded-2xl border border-[#d4d0c8] bg-[#f8f6f2] shadow-sm ${previewMobile ? 'max-w-[390px]' : 'max-w-full'}`} style={{ fontFamily: design.font, color: design.primaryColor }}>
-            <div className="border-b bg-white px-4 py-3 text-sm font-bold">
-              {pages.find((page) => page.id === selected)?.title || 'Homepage'}
-            </div>
-            <div className="space-y-3 p-3">
-              {sections.filter((section) => section.visible !== false).map((section, index) => {
-                const content = section.content || {};
-                if (section.type === 'hero') return (
-                  <div key={index} className="rounded-xl bg-white bg-cover bg-center p-6" style={content.imageUrl ? { backgroundImage: `linear-gradient(#0008,#0008),url(${content.imageUrl})`, color: '#fff' } : undefined}>
-                    <h3 className="text-xl font-bold">{content.title || 'Hero title'}</h3>
-                    <p className="text-sm opacity-80">{content.subtitle}</p>
-                  </div>
-                );
-                const text = content.body || content.text || content.address || content.quote || content.items;
-                return <div key={index} className="rounded-xl bg-white p-4"><strong className="capitalize">{section.type.replace('_', ' ')}</strong>{text && <p className="mt-1 whitespace-pre-wrap text-sm opacity-70">{text}</p>}</div>;
-              })}
-            </div>
-          </div>
-        </section>
+          {/* Preview column */}
+          {selected && (
+            <aside className="xl:sticky xl:top-24 xl:self-start">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-cafe-ink">Preview draft</h2>
+                <AceButton
+                  type="button"
+                  variant="ghost"
+                  className="!min-h-9 !py-1 !text-xs"
+                  onClick={() => setPreviewMobile((v) => !v)}
+                >
+                  {previewMobile ? 'Desktop' : 'Mobile'}
+                </AceButton>
+              </div>
+              <DraftPreview
+                title={selectedPage?.title || selectedPage?.slug || 'Homepage'}
+                design={design}
+                sections={sections}
+                mobile={previewMobile}
+              />
+              <p className="mt-2 text-[11px] text-cafe-muted">
+                Preview mendekati halaman publik. Menu unggulan & promo live diisi saat publish.
+              </p>
+            </aside>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
+import { AceInput, AceSelect } from '@/components/ace/AceInput';
+import { EmptyState } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
 import { Loader } from '@/components/ui/loader';
+import { cn } from '@/lib/utils';
 
 export function TablesManagePage() {
   const api = useApi();
@@ -138,153 +140,181 @@ export function TablesManagePage() {
   }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Meja & QR</h1>
-      {!branchId && <p className="mt-4 text-[var(--muted)]">Pilih tenant di dashboard dulu.</p>}
+    <div className="animate-float-up space-y-6">
+      <PageHeader title="Meja & QR" description="Area, meja, QR token, dan floor map" />
+      {!branchId && (
+        <EmptyState title="Pilih tenant dulu" description="Gunakan switcher organisasi & cabang di atas." />
+      )}
       {loading && <Loader label="Memuat meja…" />}
-      {error && <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button className={`btn text-sm ${tab === 'list' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('list')}>
-          List
-        </button>
-        <button className={`btn text-sm ${tab === 'map' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('map')}>
-          Floor map
-        </button>
-      </div>
-
-      {tab === 'list' && (
-        <>
-          <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addArea}>
-              <h2 className="font-semibold">Area</h2>
-              <label className="label" htmlFor="area-name">Nama area</label>
-              <input
-                id="area-name"
-                className="input"
-                placeholder="Nama area"
-                value={areaName}
-                onChange={(e) => setAreaName(e.target.value)}
-                required
-              />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!branchId || !!busy}>
-                {busy === 'area' ? 'Menambah…' : 'Tambah area'}
-              </button>
-              <ul className="text-sm text-[var(--muted)]">
-                {areas.map((a) => (
-                  <li key={a.id}>• {a.name}</li>
-                ))}
-              </ul>
-            </form>
-
-            <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addTable}>
-              <h2 className="font-semibold">Meja</h2>
-              <label className="label" htmlFor="table-area">Area</label>
-              <select
-                id="table-area"
-                className="input"
-                value={tableForm.areaId}
-                onChange={(e) => setTableForm({ ...tableForm, areaId: e.target.value })}
-                required
-              >
-                <option value="">Pilih area</option>
-                {areas.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <label className="label" htmlFor="table-name">Nama meja</label>
-              <input
-                id="table-name"
-                className="input"
-                placeholder="Nama meja"
-                value={tableForm.name}
-                onChange={(e) => setTableForm({ ...tableForm, name: e.target.value })}
-                required
-              />
-              <label className="label" htmlFor="table-capacity">Kapasitas</label>
-              <input
-                id="table-capacity"
-                className="input"
-                type="number"
-                min={1}
-                value={tableForm.capacity}
-                onChange={(e) => setTableForm({ ...tableForm, capacity: Number(e.target.value) })}
-              />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!branchId || !!busy}>
-                {busy === 'table' ? 'Menambah…' : 'Tambah meja'}
-              </button>
-            </form>
-          </div>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {!loading && tables.map((t) => {
-              const tok = t.qrTokens?.[0]?.token;
-              return (
-                <div key={t.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm flex flex-col items-center gap-2 text-center">
-                  <div className="font-medium">{t.name}</div>
-                  <div className="text-sm text-[var(--muted)]">
-                    {t.area?.name || t.areaId} · cap {t.capacity} · {t.status}
-                  </div>
-                  {tok && (
-                    <>
-                      <img src={qrImg(tok)} alt={`QR ${t.name}`} className="h-36 w-36" />
-                      <a
-                        className="break-all text-xs text-[var(--muted)] underline"
-                        href={qrUrl(tok)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {qrUrl(tok)}
-                      </a>
-                    </>
-                  )}
-                  <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!!busy} onClick={() => rotateQr(t.id)}>
-                    {busy === t.id ? 'Rotating…' : 'Rotate QR'}
-                  </button>
-                </div>
-              );
-            })}
-            {!loading && !error && branchId && !tables.length && <EmptyState title="Belum ada meja." description="Tambahkan area, lalu meja." />}
-          </div>
-        </>
+      {error && (
+        <p role="alert" className="text-sm text-[var(--danger)]">
+          {error}
+        </p>
       )}
 
-      {tab === 'map' && (
-        <div className="mt-6">
-          <p className="mb-2 text-sm text-[var(--muted)]">Drag meja untuk simpan posisi (%). {busy === 'position' && 'Menyimpan…'}</p>
-          <div
-            ref={mapRef}
-            className="relative h-[420px] w-full max-w-3xl rounded-xl border border-[#e8e4de] bg-[var(--surface)]"
-            onPointerUp={onMapPointerUp}
-          >
-            {floor.map((t, i) => {
-              const x = t.posX ?? (i % 5) * 18 + 5;
-              const y = t.posY ?? Math.floor(i / 5) * 22 + 5;
-              const busy = t.sessions?.length > 0 || t.status === 'OCCUPIED';
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 cursor-grab flex-col items-center justify-center rounded-full border text-xs font-medium active:cursor-grabbing ${
-                    busy
-                      ? 'border-amber-500 bg-amber-100 text-amber-900'
-                      : 'border-[var(--accent)] bg-white'
-                  }`}
-                  style={{ left: `${x}%`, top: `${y}%` }}
-                   onPointerDown={(e) => onMapPointerDown(t.id, e)}
-                   disabled={!!busy}
-                  title={t.area?.name || ''}
-                >
-                  <span>{t.name}</span>
-                  <span className="text-[10px] opacity-60">{t.capacity}</span>
-                </button>
-              );
-            })}
-            {!loading && !error && !floor.length && <div className="p-6 text-sm text-[var(--muted)]">Belum ada meja untuk floor map.</div>}
+      {branchId && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <AceButton
+              variant={tab === 'list' ? 'primary' : 'ghost'}
+              className="!text-sm"
+              onClick={() => setTab('list')}
+            >
+              Daftar
+            </AceButton>
+            <AceButton
+              variant={tab === 'map' ? 'primary' : 'ghost'}
+              className="!text-sm"
+              onClick={() => setTab('map')}
+            >
+              Floor map
+            </AceButton>
           </div>
-        </div>
+
+          {tab === 'list' && (
+            <>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <form className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm" onSubmit={addArea}>
+                  <h2 className="text-sm font-bold text-cafe-ink">Area</h2>
+                  <AceInput
+                    label="Nama area"
+                    value={areaName}
+                    onChange={(e) => setAreaName(e.target.value)}
+                    required
+                  />
+                  <AceButton type="submit" variant="accent" disabled={!branchId || !!busy}>
+                    {busy === 'area' ? 'Menambah…' : 'Tambah area'}
+                  </AceButton>
+                  {areas.length > 0 && (
+                    <ul className="divide-y divide-cafe-border text-sm text-cafe-muted">
+                      {areas.map((a) => (
+                        <li key={a.id} className="py-1.5">
+                          {a.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </form>
+
+                <form className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm" onSubmit={addTable}>
+                  <h2 className="text-sm font-bold text-cafe-ink">Meja</h2>
+                  <AceSelect
+                    label="Area"
+                    value={tableForm.areaId}
+                    onChange={(e) => setTableForm({ ...tableForm, areaId: e.target.value })}
+                    required
+                  >
+                    <option value="">Pilih area</option>
+                    {areas.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </AceSelect>
+                  <AceInput
+                    label="Nama meja"
+                    value={tableForm.name}
+                    onChange={(e) => setTableForm({ ...tableForm, name: e.target.value })}
+                    required
+                  />
+                  <AceInput
+                    label="Kapasitas"
+                    type="number"
+                    min={1}
+                    value={tableForm.capacity}
+                    onChange={(e) => setTableForm({ ...tableForm, capacity: Number(e.target.value) })}
+                  />
+                  <AceButton type="submit" variant="accent" disabled={!branchId || !!busy}>
+                    {busy === 'table' ? 'Menambah…' : 'Tambah meja'}
+                  </AceButton>
+                </form>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {!loading &&
+                  tables.map((t) => {
+                    const tok = t.qrTokens?.[0]?.token;
+                    return (
+                      <div
+                        key={t.id}
+                        className="flex flex-col items-center gap-2 rounded-2xl border border-cafe-border bg-cafe-card p-4 text-center shadow-sm"
+                      >
+                        <div className="font-medium text-cafe-ink">{t.name}</div>
+                        <div className="text-sm text-cafe-muted">
+                          {t.area?.name || t.areaId} · cap {t.capacity} · {t.status}
+                        </div>
+                        {tok && (
+                          <>
+                            <img src={qrImg(tok)} alt={`QR ${t.name}`} className="h-36 w-36" />
+                            <a
+                              className="break-all text-xs text-cafe-muted underline"
+                              href={qrUrl(tok)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {qrUrl(tok)}
+                            </a>
+                          </>
+                        )}
+                        <AceButton
+                          variant="primary"
+                          className="w-full !text-sm"
+                          disabled={!!busy}
+                          onClick={() => rotateQr(t.id)}
+                        >
+                          {busy === t.id ? 'Memutar…' : 'Rotate QR'}
+                        </AceButton>
+                      </div>
+                    );
+                  })}
+                {!loading && !error && branchId && !tables.length && (
+                  <EmptyState title="Belum ada meja" description="Tambahkan area, lalu meja." />
+                )}
+              </div>
+            </>
+          )}
+
+          {tab === 'map' && (
+            <div>
+              <p className="mb-2 text-sm text-cafe-muted">
+                Drag meja untuk simpan posisi (%). {busy === 'position' && 'Menyimpan…'}
+              </p>
+              <div
+                ref={mapRef}
+                className="relative h-[420px] w-full max-w-3xl rounded-xl border border-cafe-border bg-cafe-card"
+                onPointerUp={onMapPointerUp}
+              >
+                {floor.map((t, i) => {
+                  const x = t.posX ?? (i % 5) * 18 + 5;
+                  const y = t.posY ?? Math.floor(i / 5) * 22 + 5;
+                  const isBusy = t.sessions?.length > 0 || t.status === 'OCCUPIED';
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={cn(
+                        'absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 cursor-grab flex-col items-center justify-center rounded-full border text-xs font-medium active:cursor-grabbing',
+                        isBusy
+                          ? 'border-amber-500 bg-amber-100 text-amber-900'
+                          : 'border-cafe-accent bg-cafe-card text-cafe-ink',
+                      )}
+                      style={{ left: `${x}%`, top: `${y}%` }}
+                      onPointerDown={(e) => onMapPointerDown(t.id, e)}
+                      disabled={!!busy}
+                      title={t.area?.name || ''}
+                    >
+                      <span>{t.name}</span>
+                      <span className="text-[10px] opacity-60">{t.capacity}</span>
+                    </button>
+                  );
+                })}
+                {!loading && !error && !floor.length && (
+                  <div className="p-6 text-sm text-cafe-muted">Belum ada meja untuk floor map.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

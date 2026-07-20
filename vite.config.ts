@@ -11,12 +11,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Cafe Platform',
-        short_name: 'Cafe',
-        theme_color: '#1a1a1a',
-        background_color: '#ffffff',
+        name: 'Tempat Kafe',
+        short_name: 'Tempat Kafe',
+        description: 'QR order, POS, dan dapur untuk kafe Indonesia.',
+        theme_color: '#1b4332',
+        background_color: '#f4f1ea',
         display: 'standalone',
         start_url: '/',
+        lang: 'id',
         icons: [
           {
             src: '/icon.svg',

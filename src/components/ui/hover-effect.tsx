@@ -20,15 +20,15 @@ export function HoverEffect({
       {items.map((item) => {
         const inner = (
           <>
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#c4a574]/15 to-transparent opacity-0 transition group-hover:opacity-100" />
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cafe-forest-mid/15 to-transparent opacity-0 transition group-hover:opacity-100" />
             <div className="relative z-10">
-              <h3 className="font-semibold text-[#1a1a1a]">{item.title}</h3>
-              <p className="mt-2 text-sm text-[#6b6b6b]">{item.description}</p>
+              <h3 className="font-semibold text-cafe-ink">{item.title}</h3>
+              <p className="mt-2 text-sm text-cafe-muted">{item.description}</p>
             </div>
           </>
         );
         const cls =
-          'group relative block h-full rounded-2xl border border-[#e8e4de] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[#c4a574]/50 hover:shadow-lg';
+          'group relative block h-full rounded-2xl border border-cafe-border bg-cafe-card p-5 shadow-sm transition hover:-translate-y-1 hover:border-cafe-forest-mid/50 hover:shadow-lg';
         if (item.link) {
           return (
             <Link key={item.title} to={item.link} className={cls}>

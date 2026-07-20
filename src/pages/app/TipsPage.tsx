@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
+import { AceInput, AceSelect } from '@/components/ace/AceInput';
+import { AceBadge, EmptyState } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
 import { formatIdr } from '../../lib/api';
+import { Loader } from '@/components/ui/loader';
 
 export function TipsPage() {
   const api = useApi();
@@ -20,13 +22,20 @@ export function TipsPage() {
   const [error, setError] = useState('');
 
   async function load() {
-    if (!branchId) { setLoading(false); return; }
-    setLoading(true); setError('');
+    if (!branchId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       setTips(await api<any[]>(`/tips?branchId=${branchId}`));
       if (organizationId) setStaff(await api<any[]>(`/organizations/${organizationId}/members`));
-    } catch (e: any) { setError(e.message || 'Gagal memuat tip.'); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      setError(e.message || 'Gagal memuat tip.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -39,7 +48,7 @@ export function TipsPage() {
     const members = staff.filter((m) => m.userId || m.user?.id);
     if (members.length) {
       const each = Math.floor(t.amount / members.length);
-      let rest = t.amount - each * members.length;
+      const rest = t.amount - each * members.length;
       setSplits(
         members.map((m, i) => ({
           userId: m.userId || m.user?.id,
@@ -54,10 +63,14 @@ export function TipsPage() {
   async function allocate() {
     if (!selected) return;
     const total = splits.reduce((sum, split) => sum + split.amount, 0);
-    if (total !== selected.amount) { setError('Total split harus sama dengan jumlah tip.'); return; }
+    if (total !== selected.amount) {
+      setError('Total split harus sama dengan jumlah tip.');
+      return;
+    }
     if (!window.confirm(`Alokasikan tip ${formatIdr(selected.amount)}?`)) return;
     setMsg('');
-    setError(''); setBusy(true);
+    setError('');
+    setBusy(true);
     try {
       await api(`/tips/${selected.id}/allocate`, {
         method: 'POST',
@@ -68,45 +81,66 @@ export function TipsPage() {
       await load();
     } catch (e: any) {
       setError(e.message || 'Gagal mengalokasikan tip.');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (!branchId) return <p className="text-[var(--muted)]">Pilih branch dulu.</p>;
+  if (!branchId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Tip staf" />
+        <EmptyState title="Pilih branch dulu" description="Gunakan switcher cabang di atas." />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Tip staf</h1>
-      {loading && <p className="mt-4 text-[var(--muted)]" role="status">Memuat tip…</p>}
-      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="mt-6 space-y-2">
+    <div className="animate-float-up space-y-6">
+      <PageHeader title="Tip staf" description="Alokasi tip ke anggota shift" />
+      {loading && <Loader label="Memuat tip…" />}
+      {error && (
+        <p className="text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      )}
+      <ul className="divide-y divide-cafe-border overflow-hidden rounded-2xl border border-cafe-border bg-cafe-card">
         {tips.map((t) => (
-          <div key={t.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-2 text-sm">
+          <li
+            key={t.id}
+            className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+          >
             <div>
-              <div className="font-medium">
-                {formatIdr(t.amount)} · <AceBadge tone={t.status === 'ALLOCATED' ? 'ok' : 'warn'}>{t.status}</AceBadge> · {t.allocationMode}
+              <div className="flex flex-wrap items-center gap-2 font-medium text-cafe-ink">
+                {formatIdr(t.amount)}
+                <AceBadge tone={t.status === 'ALLOCATED' ? 'ok' : 'warn'}>{t.status}</AceBadge>
+                <span className="text-cafe-muted">{t.allocationMode}</span>
               </div>
-              <div className="text-[var(--muted)]">
+              <div className="mt-0.5 text-cafe-muted">
                 Order {t.order?.orderNumber || t.orderId?.slice?.(0, 8)} ·{' '}
                 {t.createdAt ? new Date(t.createdAt).toLocaleString('id-ID') : ''}
               </div>
             </div>
             {t.status !== 'ALLOCATED' && (
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] text-sm" onClick={() => openAlloc(t)}>
+              <AceButton variant="accent" className="!text-sm" onClick={() => openAlloc(t)}>
                 Alokasi
-              </button>
+              </AceButton>
             )}
-          </div>
+          </li>
         ))}
-        {!loading && !tips.length && !error && <EmptyState title="Belum ada tip." />}
-      </div>
+      </ul>
+      {!loading && !tips.length && !error && <EmptyState title="Belum ada tip" />}
 
       {selected && (
-        <div className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-6 max-w-lg space-y-2">
-          <h2 className="font-semibold">Alokasi {formatIdr(selected.amount)}</h2>
+        <div className="max-w-lg space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-cafe-ink">
+            Alokasi {formatIdr(selected.amount)}
+          </h2>
           {splits.map((s, i) => (
-            <div key={i} className="flex gap-2">
-              <select
-                className="input flex-1"
+            <div key={i} className="flex flex-wrap gap-2">
+              <AceSelect
+                containerClassName="min-w-0 flex-1"
+                label={i === 0 ? 'Staf' : undefined}
                 aria-label={`Staf untuk split ${i + 1}`}
                 value={s.userId}
                 onChange={(e) => {
@@ -124,9 +158,10 @@ export function TipsPage() {
                     </option>
                   );
                 })}
-              </select>
-              <input
-                className="input w-28"
+              </AceSelect>
+              <AceInput
+                containerClassName="w-28"
+                label={i === 0 ? 'Jumlah' : undefined}
                 type="number"
                 aria-label={`Jumlah split ${i + 1} dalam IDR`}
                 min={0}
@@ -139,26 +174,36 @@ export function TipsPage() {
               />
             </div>
           ))}
-          <button
+          <AceButton
             type="button"
-            className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold text-sm"
+            variant="ghost"
+            className="!text-sm"
             onClick={() => setSplits([...splits, { userId: '', amount: 0 }])}
           >
             + baris
-          </button>
-          <p className="text-xs text-[var(--muted)]">
+          </AceButton>
+          <p className="text-xs text-cafe-muted">
             Total split: {formatIdr(splits.reduce((a, x) => a + x.amount, 0))} (harus ={' '}
             {formatIdr(selected.amount)})
           </p>
           <div className="flex gap-2">
-            <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="button" disabled={busy} onClick={allocate}>
+            <AceButton type="button" variant="primary" disabled={busy} onClick={allocate}>
               {busy ? 'Menyimpan…' : 'Simpan'}
-            </button>
-            <button className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold" type="button" disabled={busy} onClick={() => setSelected(null)}>
+            </AceButton>
+            <AceButton
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setSelected(null)}
+            >
               Batal
-            </button>
+            </AceButton>
           </div>
-          {msg && <p className="text-sm" role="status">{msg}</p>}
+          {msg && (
+            <p className="text-sm text-cafe-muted" role="status">
+              {msg}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -1,29 +1,31 @@
 import { FloatingDock } from '@/components/ui/floating-dock';
-import { BackgroundBeamsDark } from '@/components/ui/background-beams';
 import { cn } from '@/lib/utils';
-import { BrandFooter } from '@/components/ace/BrandFooter';
 
 const DOCK = [
-  { title: 'POS', href: '/pos' },
-  { title: 'KDS', href: '/kds' },
-  { title: 'Waiter', href: '/waiter' },
-  { title: 'App', href: '/app' },
+  { title: 'POS', href: '/pos', icon: 'pos' as const },
+  { title: 'KDS', href: '/kds', icon: 'kds' as const },
+  { title: 'Waiter', href: '/waiter', icon: 'waiter' as const },
+  { title: 'App', href: '/app', icon: 'app' as const },
 ];
 
 export function OpsShell({
   children,
   className,
-  beams = true,
 }: {
   children: React.ReactNode;
   className?: string;
-  beams?: boolean;
 }) {
   return (
-    <div className={cn('relative min-h-screen bg-[#0c0c0c] text-white', className)}>
-      {beams && <BackgroundBeamsDark />}
-      <div className="relative z-10 min-h-[calc(100vh-3.5rem)] pb-20">{children}</div>
-      <BrandFooter dark className="pb-24" />
+    <div
+      data-ops
+      className={cn(
+        'relative min-h-[100dvh] bg-[var(--ops-bg)] text-[var(--ops-ink)]',
+        className,
+      )}
+    >
+      <div className="relative z-10 min-h-[100dvh] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+        {children}
+      </div>
       <FloatingDock items={DOCK} />
     </div>
   );

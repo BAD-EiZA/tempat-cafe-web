@@ -1,20 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Minus, Plus } from '@phosphor-icons/react';
 import { useApi } from '@/hooks/useApi';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useAppStore } from '@/lib/store';
 import { formatIdr } from '@/lib/api';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { OpsShell } from '@/components/ace/OpsShell';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
 import { AceInput, AceSelect } from '@/components/ace/AceInput';
-import { GlareCard } from '@/components/ui/glare-card';
 import { AnimatedModal } from '@/components/ui/animated-modal';
 import { AceBadge } from '@/components/ace/PageShell';
-import { MovingBorderButton } from '@/components/ui/moving-border';
 import { isMockSnap, loadSnap } from '@/lib/snap';
 import { ActionError, ConnectionStatus, statusLabel } from '@/components/ace/OpsFeedback';
+import { cn } from '@/lib/utils';
 
 export function PosPage() {
   const api = useApi();
@@ -41,7 +40,14 @@ export function PosPage() {
   const [submitting, setSubmitting] = useState(false);
   const [busyAction, setBusyAction] = useState('');
   const [actionError, setActionError] = useState('');
+  const [activeCat, setActiveCat] = useState('all');
   const submittingRef = useRef(false);
+
+  useEffect(() => {
+    setShiftId(localStorage.getItem('pos_shift'));
+    setCart([]);
+    setDetail(null);
+  }, [branchId]);
 
   useEffect(() => {
     if (branchId) return;
@@ -86,7 +92,31 @@ export function PosPage() {
     refresh().catch(() => undefined);
   });
 
+  const categories = useMemo(() => {
+    const list: { id: string; name: string }[] = [];
+    for (const m of menu?.menus || []) {
+      for (const c of m.categories || []) {
+        if ((c.items || []).length) list.push({ id: c.id, name: c.name });
+      }
+    }
+    return list;
+  }, [menu]);
+
+  const items = useMemo(() => {
+    const out: any[] = [];
+    for (const m of menu?.menus || []) {
+      for (const c of m.categories || []) {
+        if (activeCat !== 'all' && c.id !== activeCat) continue;
+        for (const item of c.items || []) {
+          out.push({ ...item, _catId: c.id });
+        }
+      }
+    }
+    return out;
+  }, [menu, activeCat]);
+
   const total = useMemo(() => cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0), [cart]);
+  const cartCount = useMemo(() => cart.reduce((s, c) => s + c.quantity, 0), [cart]);
 
   function addItem(item: any) {
     setCart((prev) => {
@@ -98,6 +128,14 @@ export function PosPage() {
       }
       return [...prev, { menuItemId: item.id, name: item.name, unitPrice: item.price, quantity: 1 }];
     });
+  }
+
+  function setCartQty(menuItemId: string, quantity: number) {
+    setCart((prev) =>
+      quantity <= 0
+        ? prev.filter((c) => c.menuItemId !== menuItemId)
+        : prev.map((c) => (c.menuItemId === menuItemId ? { ...c, quantity } : c)),
+    );
   }
 
   async function openShift() {
@@ -173,21 +211,26 @@ export function PosPage() {
         }
         if (isMockSnap(snapToken, clientKey, mock) && paymentId) {
           await api(`/payments/${paymentId}/mock-pay`, { method: 'POST' }).catch(() => undefined);
+          setCart([]);
           setMsg(`Order ${order.orderNumber} dibayar (mock)`);
         } else if (snapToken && clientKey) {
           await loadSnap(clientKey);
-          setCart([]);
           window.snap?.pay(snapToken, {
             onSuccess: () => {
+              setCart([]);
               setMsg(`Order ${order.orderNumber} dibayar`);
               refresh();
             },
             onPending: () => {
+              setCart([]);
               setMsg(`Order ${order.orderNumber} pending`);
               refresh();
             },
             onError: () => setMsg('Pembayaran gagal'),
-            onClose: () => refresh(),
+            onClose: () => {
+              setMsg('Pembayaran belum selesai. Keranjang tetap tersimpan.');
+              refresh();
+            },
           });
           await refresh();
           return;
@@ -219,21 +262,27 @@ export function PosPage() {
   }
 
   async function openDetail(id: string) {
-    setDetail(await api<any>(`/orders/${id}`));
+    setActionError('');
+    try {
+      setDetail(await api<any>(`/orders/${id}`));
+    } catch (e: any) {
+      setActionError(e.message || 'Detail order gagal dimuat');
+    }
   }
 
   async function confirmVoid() {
     if (!voidModal || busyAction) return;
+    const orderId = voidModal.orderId;
     setBusyAction('void');
     setActionError('');
     try {
-      await api(`/orders/${voidModal.orderId}/void-item`, {
+      await api(`/orders/${orderId}/void-item`, {
         method: 'POST',
         body: { orderItemId: voidModal.itemId, reason: voidReason || 'void' },
       });
       setVoidModal(null);
       setMsg('Item dibatalkan');
-      await openDetail(voidModal.orderId);
+      await openDetail(orderId);
       await refresh();
     } catch (e: any) {
       setActionError(e.message || 'Item gagal dibatalkan');
@@ -244,66 +293,123 @@ export function PosPage() {
 
   async function transferTable(orderId: string, tableId: string) {
     if (!tableId) return;
-    await api(`/orders/${orderId}/transfer-table`, { method: 'POST', body: { tableId } });
-    setMsg('Transfer meja OK');
-    await refresh();
+    setActionError('');
+    try {
+      await api(`/orders/${orderId}/transfer-table`, { method: 'POST', body: { tableId } });
+      setMsg('Transfer meja OK');
+      await refresh();
+    } catch (e: any) {
+      setActionError(e.message || 'Transfer meja gagal');
+    }
   }
 
   async function reprint(orderId: string) {
-    const r = await api<any>(`/orders/${orderId}/reprint`, { method: 'POST' });
-    setMsg(`Reprint: ${r.reprinted || 0} ticket`);
+    setActionError('');
+    try {
+      const r = await api<any>(`/orders/${orderId}/reprint`, { method: 'POST' });
+      setMsg(`Reprint: ${r.reprinted || 0} ticket`);
+    } catch (e: any) {
+      setActionError(e.message || 'Cetak ulang gagal');
+    }
   }
 
   async function mergeSessions() {
     if (!mergeSrc || !mergeTgt || mergeSrc === mergeTgt) return;
-    await api('/pos/sessions/merge', {
-      method: 'POST',
-      body: { sourceSessionId: mergeSrc, targetSessionId: mergeTgt },
-    });
-    setMsg('Session digabung');
-    setMergeSrc('');
-    setMergeTgt('');
-    await refresh();
+    setActionError('');
+    try {
+      await api('/pos/sessions/merge', {
+        method: 'POST',
+        body: { sourceSessionId: mergeSrc, targetSessionId: mergeTgt },
+      });
+      setMsg('Session digabung');
+      setMergeSrc('');
+      setMergeTgt('');
+      await refresh();
+    } catch (e: any) {
+      setActionError(e.message || 'Merge session gagal');
+    }
   }
 
   return (
     <OpsShell>
-      <div className="min-h-screen md:flex">
-        <div className="flex-1 border-r border-white/10 p-4">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h1 className="text-xl font-bold">POS</h1>
-            <div className="flex items-center gap-2 text-black">
+      <div className="flex min-h-[100dvh] flex-col md:flex-row">
+        {/* Menu column */}
+        <div className="flex min-w-0 flex-1 flex-col border-b border-white/10 p-3 sm:p-4 md:border-b-0 md:border-r">
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">POS</h1>
+              <p className="text-xs ops-muted">
+                Shift {shiftId ? 'terbuka' : 'tertutup'} · {items.length} item
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <TenantSwitcher />
-              <AceButton as={Link} to="/app" variant="ghost" className="!border-white/20 !text-white !text-sm">
+              <AceButton as={Link} to="/app" variant="ghost" className="!border-white/15 !text-white !text-sm">
                 Merchant
               </AceButton>
             </div>
-          </div>
-          <ConnectionStatus connected={connected} lastSync={lastSync} error={offline ? 'Data POS gagal dimuat' : ''} onRetry={() => refresh()} />
+          </header>
+
+          <ConnectionStatus
+            connected={connected}
+            lastSync={lastSync}
+            error={offline ? 'Data POS gagal dimuat' : ''}
+            onRetry={() => refresh()}
+          />
           <ActionError message={actionError} />
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {(menu?.menus || []).flatMap((m: any) =>
-              (m.categories || []).flatMap((c: any) =>
-                (c.items || []).map((item: any) => (
-                  <GlareCard
-                    key={item.id}
-                    className="!border-white/10 !bg-white/5 !text-white"
-                    onClick={() => addItem(item)}
-                  >
-                    <div className="font-medium">{item.name}</div>
-                    <div className="text-sm text-white/50">{formatIdr(item.price)}</div>
-                  </GlareCard>
-                )),
-              ),
+
+          {categories.length > 0 && (
+            <nav
+              aria-label="Kategori"
+              className="mb-3 flex gap-1.5 overflow-x-auto pb-1"
+            >
+              <button
+                type="button"
+                className="ops-chip shrink-0"
+                data-active={activeCat === 'all'}
+                onClick={() => setActiveCat('all')}
+              >
+                Semua
+              </button>
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="ops-chip shrink-0"
+                  data-active={activeCat === c.id}
+                  onClick={() => setActiveCat(c.id)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          <div className="grid flex-1 grid-cols-2 content-start gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="ops-tile min-h-[4.5rem]"
+                onClick={() => addItem(item)}
+              >
+                <div className="line-clamp-2 text-sm font-semibold leading-snug">{item.name}</div>
+                <div className="mt-1 text-sm font-bold text-[var(--ops-accent)]">
+                  {formatIdr(item.price)}
+                </div>
+              </button>
+            ))}
+            {!items.length && (
+              <div className="ops-empty col-span-full">Menu kosong atau belum dimuat.</div>
             )}
           </div>
 
           {sessions.length > 0 && (
-            <AceCard className="mt-6 space-y-2 !border-white/10 !bg-white/5 !text-white">
-              <h2 className="font-semibold">Merge session</h2>
+            <div className="ops-panel mt-4 space-y-2 p-3">
+              <h2 className="text-sm font-semibold">Merge session</h2>
               <div className="flex flex-wrap gap-2">
                 <AceSelect
-                  className="!bg-black/40 !text-white flex-1"
+                  className="flex-1"
                   value={mergeSrc}
                   onChange={(e) => setMergeSrc(e.target.value)}
                 >
@@ -315,7 +421,7 @@ export function PosPage() {
                   ))}
                 </AceSelect>
                 <AceSelect
-                  className="!bg-black/40 !text-white flex-1"
+                  className="flex-1"
                   value={mergeTgt}
                   onChange={(e) => setMergeTgt(e.target.value)}
                 >
@@ -330,30 +436,40 @@ export function PosPage() {
                   Merge
                 </AceButton>
               </div>
-            </AceCard>
+            </div>
           )}
         </div>
 
-        <aside className="w-full p-4 md:w-96">
-          <AceCard className="mb-4 space-y-2 text-sm !border-white/10 !bg-white/5 !text-white">
-            <div className="font-semibold">Shift {shiftId ? 'terbuka' : 'tertutup'}</div>
+        {/* Cart / orders rail */}
+        <aside className="flex w-full flex-col gap-3 p-3 sm:p-4 md:w-[22rem] md:shrink-0 lg:w-96">
+          <div className="ops-panel space-y-2 p-3 text-sm">
+            <div className="font-semibold">
+              Shift{' '}
+              <span className={shiftId ? 'text-emerald-300' : 'text-amber-200'}>
+                {shiftId ? 'terbuka' : 'tertutup'}
+              </span>
+            </div>
             {!shiftId ? (
               <>
                 <AceInput
-                  className="!bg-black/40 !text-white"
                   type="number"
                   placeholder="Opening cash"
                   value={openingCash || ''}
                   onChange={(e) => setOpeningCash(Number(e.target.value))}
                 />
-                <AceButton variant="accent" className="w-full" onClick={openShift} disabled={!branchId || !!busyAction}>
+                <AceButton
+                  variant="accent"
+                  className="w-full"
+                  onClick={openShift}
+                  disabled={!branchId || !!busyAction}
+                >
                   {busyAction === 'open-shift' ? 'Membuka...' : 'Buka shift'}
                 </AceButton>
               </>
             ) : (
               <AceButton
                 variant="ghost"
-                className="w-full !border-white/20 !text-white"
+                className="w-full !border-white/15 !text-white"
                 onClick={() => {
                   setActualCash(openingCash);
                   setCloseOpen(true);
@@ -362,105 +478,174 @@ export function PosPage() {
                 Tutup shift
               </AceButton>
             )}
-          </AceCard>
-
-          <h2 className="font-semibold">Keranjang</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {cart.map((c) => (
-              <li key={c.menuItemId} className="flex justify-between text-white/80">
-                <span>
-                  {c.quantity}× {c.name}
-                </span>
-                <span>{formatIdr(c.unitPrice * c.quantity)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 font-bold text-[#c4a574]">{formatIdr(total)}</p>
-          <div className="mt-2 flex gap-2">
-            <AceButton
-              variant={payMethod === 'CASH' ? 'primary' : 'ghost'}
-              className={`flex-1 !text-sm ${payMethod !== 'CASH' ? '!border-white/20 !text-white' : ''}`}
-              onClick={() => setPayMethod('CASH')}
-            >
-              Cash
-            </AceButton>
-            <AceButton
-              variant={payMethod === 'MIDTRANS' ? 'primary' : 'ghost'}
-              className={`flex-1 !text-sm ${payMethod !== 'MIDTRANS' ? '!border-white/20 !text-white' : ''}`}
-              onClick={() => setPayMethod('MIDTRANS')}
-            >
-              Non-tunai
-            </AceButton>
           </div>
-          <MovingBorderButton
-            className="mt-3 w-full"
-            containerClassName="mt-3 w-full"
-            disabled={!cart.length || !shiftId || submitting}
-            onClick={submitOrder}
-          >
-            {submitting ? 'Memproses…' : shiftId ? 'Buat order' : 'Buka shift untuk order'}
-          </MovingBorderButton>
-          {msg && <p className="mt-2 text-sm text-white/50">{msg}</p>}
 
-          <h2 className="mt-8 font-semibold">Order aktif</h2>
-          <div className="mt-2 max-h-[50vh] space-y-2 overflow-auto">
-            {orders.map((o) => (
-              <AceCard key={o.id} className="text-sm !border-white/10 !bg-white/5 !text-white">
-                <div className="flex justify-between">
-                  <span className="font-bold">{o.orderNumber}</span>
-                   <AceBadge tone="info">{statusLabel(o.status)}</AceBadge>
+          <div className="ops-panel flex flex-1 flex-col p-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Keranjang</h2>
+              {cartCount > 0 && (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-bold">
+                  {cartCount}
+                </span>
+              )}
+            </div>
+            <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto text-sm">
+              {cart.map((c) => (
+                <li key={c.menuItemId} className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{c.name}</div>
+                    <div className="ops-muted text-xs">{formatIdr(c.unitPrice * c.quantity)}</div>
+                  </div>
+                  <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/20 p-0.5">
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-white/10"
+                      aria-label={`Kurangi ${c.name}`}
+                      onClick={() => setCartQty(c.menuItemId, c.quantity - 1)}
+                    >
+                      <Minus weight="bold" className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="w-6 text-center text-xs font-bold tabular-nums">{c.quantity}</span>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-white/10"
+                      aria-label={`Tambah ${c.name}`}
+                      onClick={() => setCartQty(c.menuItemId, c.quantity + 1)}
+                    >
+                      <Plus weight="bold" className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+              {!cart.length && <li className="ops-muted py-4 text-center text-xs">Keranjang kosong</li>}
+            </ul>
+
+            <p className="mt-3 text-right text-lg font-bold tabular-nums text-[var(--ops-accent)]">
+              {formatIdr(total)}
+            </p>
+
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <AceButton
+                variant={payMethod === 'CASH' ? 'primary' : 'ghost'}
+                className={cn('!text-sm', payMethod !== 'CASH' && '!border-white/15 !text-white')}
+                onClick={() => setPayMethod('CASH')}
+              >
+                Cash
+              </AceButton>
+              <AceButton
+                variant={payMethod === 'MIDTRANS' ? 'primary' : 'ghost'}
+                className={cn('!text-sm', payMethod !== 'MIDTRANS' && '!border-white/15 !text-white')}
+                onClick={() => setPayMethod('MIDTRANS')}
+              >
+                Non-tunai
+              </AceButton>
+            </div>
+
+            <AceButton
+              variant="accent"
+              className="mt-3 w-full !min-h-12"
+              disabled={!cart.length || !shiftId || submitting}
+              onClick={submitOrder}
+            >
+              {submitting ? 'Memproses…' : shiftId ? 'Buat order' : 'Buka shift dulu'}
+            </AceButton>
+            {msg && <p className="mt-2 text-sm ops-muted">{msg}</p>}
+          </div>
+
+          <div>
+            <h2 className="mb-2 font-semibold">Order aktif</h2>
+            <div className="max-h-[40vh] space-y-2 overflow-y-auto md:max-h-[32vh]">
+              {orders.map((o) => (
+                <div key={o.id} className="ops-panel p-3 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold">{o.orderNumber}</span>
+                    <AceBadge tone="info">{statusLabel(o.status)}</AceBadge>
+                  </div>
+                  <p className="mt-0.5 ops-muted">{formatIdr(o.grandTotal ?? o.total ?? 0)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {o.status === 'NEW' && (
+                      <AceButton
+                        variant="ghost"
+                        className="!border-white/15 !text-xs !text-white"
+                        disabled={!!busyAction}
+                        onClick={() => setStatus(o.id, 'ACCEPTED')}
+                      >
+                        Terima
+                      </AceButton>
+                    )}
+                    {['NEW', 'ACCEPTED'].includes(o.status) && (
+                      <AceButton
+                        variant="ghost"
+                        className="!border-white/15 !text-xs !text-white"
+                        disabled={!!busyAction}
+                        onClick={() => setStatus(o.id, 'PREPARING')}
+                      >
+                        Siapkan
+                      </AceButton>
+                    )}
+                    {o.status === 'PREPARING' && (
+                      <AceButton
+                        variant="ghost"
+                        className="!border-white/15 !text-xs !text-white"
+                        disabled={!!busyAction}
+                        onClick={() => setStatus(o.id, 'READY')}
+                      >
+                        Siap
+                      </AceButton>
+                    )}
+                    {o.status === 'READY' && (
+                      <AceButton
+                        variant="primary"
+                        className="!text-xs"
+                        disabled={!!busyAction}
+                        onClick={() => window.confirm('Selesaikan order ini?') && setStatus(o.id, 'COMPLETED')}
+                      >
+                        Selesai
+                      </AceButton>
+                    )}
+                    <AceButton
+                      variant="ghost"
+                      className="!border-white/15 !text-xs !text-white"
+                      onClick={() => openDetail(o.id)}
+                    >
+                      Detail
+                    </AceButton>
+                    <AceButton
+                      variant="ghost"
+                      className="!border-white/15 !text-xs !text-white"
+                      onClick={() => reprint(o.id)}
+                    >
+                      Cetak
+                    </AceButton>
+                  </div>
                 </div>
-                <p className="text-white/50">{formatIdr(o.grandTotal ?? o.total ?? 0)}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {o.status === 'NEW' && (
-                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'ACCEPTED')}>
-                      Terima
-                    </AceButton>
-                  )}
-                  {['NEW', 'ACCEPTED'].includes(o.status) && (
-                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'PREPARING')}>
-                      Siapkan
-                    </AceButton>
-                  )}
-                  {o.status === 'PREPARING' && (
-                    <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" disabled={!!busyAction} onClick={() => setStatus(o.id, 'READY')}>
-                      Siap
-                    </AceButton>
-                  )}
-                  {o.status === 'READY' && (
-                    <AceButton variant="primary" className="!text-xs" disabled={!!busyAction} onClick={() => window.confirm('Selesaikan order ini?') && setStatus(o.id, 'COMPLETED')}>
-                      Selesai
-                    </AceButton>
-                  )}
-                  <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" onClick={() => openDetail(o.id)}>
-                    Detail
-                  </AceButton>
-                  <AceButton variant="ghost" className="!border-white/20 !text-xs !text-white" onClick={() => reprint(o.id)}>
-                    Cetak ulang
-                  </AceButton>
-                </div>
-              </AceCard>
-            ))}
+              ))}
+              {!orders.length && <div className="ops-empty">Tidak ada order aktif.</div>}
+            </div>
           </div>
 
           {detail && (
-            <AceCard className="mt-4 space-y-2 text-sm !border-white/10 !bg-white/5 !text-white">
+            <div className="ops-panel space-y-2 p-3 text-sm">
               <div className="flex justify-between">
                 <span className="font-semibold">{detail.orderNumber}</span>
-                <button className="text-xs underline text-white/60" onClick={() => setDetail(null)}>
+                <button
+                  type="button"
+                  className="text-xs ops-muted underline-offset-2 hover:underline"
+                  onClick={() => setDetail(null)}
+                >
                   Tutup
                 </button>
               </div>
               {(detail.items || []).map((i: any) => (
                 <div key={i.id} className="flex items-center justify-between gap-2">
                   <span>
-                    {i.quantity}× {i.nameSnapshot || i.name}
+                    {i.quantity}x {i.nameSnapshot || i.name}
                     {i.voidedAt ? ' (void)' : ''}
                   </span>
                   {!i.voidedAt && (
                     <AceButton
                       variant="ghost"
-                      className="!border-white/20 !py-0.5 !text-xs !text-white"
+                      className="!border-white/15 !py-0.5 !text-xs !text-white"
                       onClick={() => setVoidModal({ orderId: detail.id, itemId: i.id })}
                     >
                       Batalkan
@@ -470,7 +655,7 @@ export function PosPage() {
               ))}
               {tables.length > 0 && (
                 <AceSelect
-                  className="!bg-black/40 !text-white text-xs"
+                  className="text-xs"
                   defaultValue=""
                   onChange={(e) => {
                     if (e.target.value) transferTable(detail.id, e.target.value);
@@ -484,7 +669,7 @@ export function PosPage() {
                   ))}
                 </AceSelect>
               )}
-            </AceCard>
+            </div>
           )}
         </aside>
       </div>

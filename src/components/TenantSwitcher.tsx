@@ -22,7 +22,7 @@ export function TenantSwitcher() {
   const branches = org?.organization?.branches || [];
 
   const sel =
-    'rounded-xl border border-[#d4d0c8] bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-[#c4a574] focus:ring-2 focus:ring-[#c4a574]/25';
+    'rounded-xl border border-cafe-border bg-cafe-card px-2.5 py-1.5 text-sm outline-none transition focus:border-cafe-accent focus:ring-2 focus:ring-cafe-accent/25';
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm" data-ace="tenant">
@@ -31,8 +31,9 @@ export function TenantSwitcher() {
         value={organizationId || ''}
         onChange={(e) => {
           const m = memberships.find((x) => x.organizationId === e.target.value);
+          if (!m) return;
           const b = m?.organization?.branches?.[0];
-          if (m && b) setTenant(m.organizationId, b.id);
+          setTenant(m.organizationId, b?.id || '');
         }}
       >
         {memberships.map((m) => (

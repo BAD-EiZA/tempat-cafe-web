@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none" role="img" aria-label="Multi cabang">
+  <rect width="800" height="200" fill="#e8ebe4"/>
+  <!-- building 1 -->
+  <rect x="40" y="50" width="140" height="120" rx="8" fill="#1b4332"/>
+  <rect x="56" y="70" width="28" height="28" fill="#f4f1ea" fill-opacity=".2"/>
+  <rect x="96" y="70" width="28" height="28" fill="#f4f1ea" fill-opacity=".2"/>
+  <rect x="136" y="70" width="28" height="28" fill="#d97706" fill-opacity=".5"/>
+  <rect x="56" y="110" width="28" height="28" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="96" y="110" width="28" height="28" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="100" y="140" width="24" height="30" fill="#0f1411" fill-opacity=".4"/>
+  <!-- building 2 -->
+  <rect x="220" y="30" width="160" height="140" rx="8" fill="#2d6a4f"/>
+  <rect x="240" y="55" width="36" height="36" fill="#f4f1ea" fill-opacity=".2"/>
+  <rect x="290" y="55" width="36" height="36" fill="#f4f1ea" fill-opacity=".2"/>
+  <rect x="340" y="55" width="20" height="36" fill="#d97706" fill-opacity=".45"/>
+  <rect x="240" y="105" width="36" height="36" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="290" y="105" width="36" height="36" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="280" y="140" width="30" height="30" fill="#0f1411" fill-opacity=".35"/>
+  <!-- building 3 -->
+  <rect x="420" y="60" width="130" height="110" rx="8" fill="#1b4332"/>
+  <rect x="440" y="80" width="30" height="30" fill="#f4f1ea" fill-opacity=".2"/>
+  <rect x="485" y="80" width="30" height="30" fill="#d97706" fill-opacity=".4"/>
+  <rect x="440" y="120" width="30" height="30" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="470" y="140" width="24" height="30" fill="#0f1411" fill-opacity=".4"/>
+  <!-- building 4 -->
+  <rect x="590" y="40" width="150" height="130" rx="8" fill="#14201a"/>
+  <rect x="610" y="65" width="32" height="32" fill="#2d6a4f"/>
+  <rect x="655" y="65" width="32" height="32" fill="#f4f1ea" fill-opacity=".15"/>
+  <rect x="700" y="65" width="20" height="32" fill="#d97706" fill-opacity=".4"/>
+  <rect x="610" y="110" width="32" height="32" fill="#f4f1ea" fill-opacity=".12"/>
+  <rect x="655" y="110" width="32" height="32" fill="#2d6a4f" fill-opacity=".6"/>
+  <rect x="645" y="140" width="28" height="30" fill="#0f1411" fill-opacity=".45"/>
+  <!-- ground line -->
+  <rect x="0" y="168" width="800" height="32" fill="#d9e0d8" fill-opacity=".5"/>
+  <!-- pin markers -->
+  <circle cx="110" cy="40" r="10" fill="#d97706"/>
+  <circle cx="300" cy="22" r="10" fill="#d97706"/>
+  <circle cx="485" cy="48" r="10" fill="#d97706"/>
+  <circle cx="665" cy="28" r="10" fill="#d97706"/>
+</svg>

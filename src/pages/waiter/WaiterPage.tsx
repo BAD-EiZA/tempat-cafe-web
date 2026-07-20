@@ -6,11 +6,9 @@ import { useAppStore } from '@/lib/store';
 import { formatIdr } from '@/lib/api';
 import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { OpsShell } from '@/components/ace/OpsShell';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { GlareCard } from '@/components/ui/glare-card';
-import { EmptyState } from '@/components/ace/PageShell';
 import { ActionError, ConnectionStatus, statusLabel } from '@/components/ace/OpsFeedback';
+import { cn } from '@/lib/utils';
 
 export function WaiterPage() {
   const api = useApi();
@@ -80,77 +78,130 @@ export function WaiterPage() {
 
   async function openTable(t: any) {
     setSelected(t);
-    const orders = await api<any[]>(`/orders?branchId=${branchId}`);
-    setDetail(orders.filter((o) => o.tableId === t.id).slice(0, 10));
+    setActionError('');
+    try {
+      const orders = await api<any[]>(`/orders?branchId=${branchId}`);
+      setDetail(orders.filter((o) => o.tableId === t.id).slice(0, 10));
+    } catch (e: any) {
+      setDetail([]);
+      setActionError(e.message || 'Order meja gagal dimuat');
+    }
   }
 
   return (
     <OpsShell>
-      <div className="p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-bold">Waiter</h1>
-          <div className="flex items-center gap-2 text-black">
+      <div className="p-3 sm:p-4">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Waiter</h1>
+            <p className="text-xs ops-muted">
+              {ready.length} siap diantar · {tables.length} meja
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <TenantSwitcher />
-            <AceButton as={Link} to="/app" variant="ghost" className="!border-white/20 !text-white !text-sm">
+            <AceButton as={Link} to="/app" variant="ghost" className="!border-white/15 !text-white !text-sm">
               Merchant
             </AceButton>
           </div>
-        </div>
-        <ConnectionStatus connected={connected} lastSync={lastSync} error={loadError} onRetry={() => load()} />
+        </header>
+
+        <ConnectionStatus
+          connected={connected}
+          lastSync={lastSync}
+          error={loadError}
+          onRetry={() => load()}
+        />
         <ActionError message={actionError} />
-        <h2 className="font-semibold">Siap diantar</h2>
-        <div className="mt-2 space-y-2">
-          {ready.map((o) => (
-            <AceCard
-              key={o.id}
-              className="flex items-center justify-between !border-white/10 !bg-white/5 !text-white"
-            >
-              <div>
-                <div className="font-bold">{o.orderNumber}</div>
-                <div className="text-sm text-white/50">{formatIdr(o.grandTotal)}</div>
+
+        <section className="mt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-bold">Siap diantar</h2>
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-200">
+              {ready.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {ready.map((o) => (
+              <div
+                key={o.id}
+                className="ops-panel flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-emerald-400 p-4"
+              >
+                <div>
+                  <div className="text-lg font-bold">{o.orderNumber}</div>
+                  <div className="text-sm ops-muted">{formatIdr(o.grandTotal)}</div>
+                  {o.table?.name && (
+                    <div className="mt-0.5 text-xs text-amber-200/90">Meja {o.table.name}</div>
+                  )}
+                </div>
+                <AceButton
+                  variant="accent"
+                  className="!min-h-12 !px-5"
+                  disabled={!!busyId}
+                  onClick={() => serve(o.id)}
+                >
+                  {busyId === o.id ? 'Memproses...' : 'Sudah diantar'}
+                </AceButton>
               </div>
-              <AceButton variant="accent" className="text-sm" disabled={!!busyId} onClick={() => serve(o.id)}>
-                {busyId === o.id ? 'Memproses...' : 'Sudah diantar'}
-              </AceButton>
-            </AceCard>
-          ))}
-          {!ready.length && <EmptyState title="Tidak ada order ready." />}
-        </div>
-        <h2 className="mt-8 font-semibold">Meja</h2>
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {tables.map((t) => (
-            <GlareCard
-              key={t.id}
-              className={`text-center !border-white/10 !bg-white/5 !text-white ${
-                t.status === 'OCCUPIED' ? '!border-amber-400/50 !bg-amber-500/10' : ''
-              }`}
-              onClick={() => openTable(t)}
-            >
-              <div className="font-bold">{t.name}</div>
-               <div className="text-xs text-white/50">{statusLabel(t.status)}</div>
-            </GlareCard>
-          ))}
-        </div>
+            ))}
+            {!ready.length && (
+              <div className="ops-empty">Tidak ada order siap. Tunggu dapur.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="mb-2 text-sm font-bold">Meja</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {tables.map((t) => {
+              const occupied = t.status === 'OCCUPIED';
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => openTable(t)}
+                  className={cn(
+                    'ops-tile min-h-[4.5rem] text-center',
+                    occupied && '!border-amber-400/40 !bg-amber-500/10',
+                    selected?.id === t.id && 'ring-2 ring-[var(--ops-accent)]',
+                  )}
+                >
+                  <div className="font-bold">{t.name}</div>
+                  <div className="mt-1 text-xs ops-muted">{statusLabel(t.status)}</div>
+                </button>
+              );
+            })}
+          </div>
+          {!tables.length && <div className="ops-empty mt-2">Belum ada meja.</div>}
+        </section>
+
         {selected && (
-          <AceCard className="mt-4 !border-white/10 !bg-white/5 !text-white">
-            <div className="flex justify-between">
+          <section className="ops-panel mt-4 p-4">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="font-semibold">Meja {selected.name}</h3>
-              <button className="text-sm underline text-white/60" onClick={() => setSelected(null)}>
+              <button
+                type="button"
+                className="text-sm font-medium text-white/60 underline-offset-2 hover:underline"
+                onClick={() => setSelected(null)}
+              >
                 Tutup
               </button>
             </div>
-            <ul className="mt-2 space-y-1 text-sm">
+            <ul className="mt-3 divide-y divide-white/10 text-sm">
               {detail.map((o) => (
-                <li key={o.id} className="flex justify-between">
+                <li key={o.id} className="flex justify-between gap-2 py-2 first:pt-0">
                   <span>
-                     {o.orderNumber} · {statusLabel(o.status)}
+                    {o.orderNumber}{' '}
+                    <span className="ops-muted">· {statusLabel(o.status)}</span>
                   </span>
-                  <span>{formatIdr(o.grandTotal)}</span>
+                  <span className="tabular-nums font-medium">{formatIdr(o.grandTotal)}</span>
                 </li>
               ))}
-              {!detail.length && <li className="text-white/50">Tidak ada order meja ini.</li>}
+              {!detail.length && (
+                <li className="py-2 ops-muted">Tidak ada order meja ini.</li>
+              )}
             </ul>
-          </AceCard>
+          </section>
         )}
       </div>
     </OpsShell>

@@ -7,8 +7,8 @@ import { TenantSwitcher } from '@/components/TenantSwitcher';
 import { OpsShell } from '@/components/ace/OpsShell';
 import { AceButton } from '@/components/ace/AceButton';
 import { AceSelect } from '@/components/ace/AceInput';
-import { GlareCard } from '@/components/ui/glare-card';
 import { ActionError, ConnectionStatus, statusLabel } from '@/components/ace/OpsFeedback';
+import { cn } from '@/lib/utils';
 
 type KitchenStatus = 'QUEUED' | 'ACKNOWLEDGED' | 'PREPARING' | 'READY' | 'SERVED';
 
@@ -20,6 +20,14 @@ const NEXT: Partial<Record<KitchenStatus, KitchenStatus>> = {
 };
 
 const COLUMNS: KitchenStatus[] = ['QUEUED', 'ACKNOWLEDGED', 'PREPARING', 'READY'];
+
+const COL_ACCENT: Record<KitchenStatus, string> = {
+  QUEUED: 'border-l-white/30',
+  ACKNOWLEDGED: 'border-l-sky-400',
+  PREPARING: 'border-l-amber-400',
+  READY: 'border-l-emerald-400',
+  SERVED: 'border-l-emerald-600',
+};
 
 export function KdsPage() {
   const api = useApi();
@@ -59,24 +67,27 @@ export function KdsPage() {
     const q = stationFilter ? `&stationId=${stationFilter}` : '';
     try {
       const list = await api<any[]>(`/kitchen/tickets?branchId=${branchId}${q}`);
-    setTickets((prev) => {
-      if (list.length > prev.length && prev.length > 0) {
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const o = ctx.createOscillator();
-          const g = ctx.createGain();
-          o.connect(g);
-          g.connect(ctx.destination);
-          o.frequency.value = 880;
-          g.gain.value = 0.05;
-          o.start();
-          setTimeout(() => o.stop(), 180);
-        } catch {
-          /* ignore */
+      setTickets((prev) => {
+        const prevIds = new Set(prev.map((t) => t.id));
+        const hasNew =
+          prev.length > 0 && list.some((t) => t.id && !prevIds.has(t.id));
+        if (hasNew) {
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.frequency.value = 880;
+            g.gain.value = 0.05;
+            o.start();
+            setTimeout(() => o.stop(), 180);
+          } catch {
+            /* ignore */
+          }
         }
-      }
-      return list;
-    });
+        return list;
+      });
       setPrevCount(list.length);
       setLastSync(new Date());
       setLoadError('');
@@ -112,22 +123,33 @@ export function KdsPage() {
 
   return (
     <OpsShell>
-      <div className="p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-bold">KDS</h1>
-          <div className="flex items-center gap-2 text-black">
+      <div className="flex min-h-[100dvh] flex-col p-3 sm:p-4">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">KDS</h1>
+            <p className="text-xs ops-muted">Kitchen display · {prevCount} ticket</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <TenantSwitcher />
-            <AceButton as={Link} to="/app" variant="ghost" className="!border-white/20 !text-white !text-sm">
+            <AceButton as={Link} to="/app" variant="ghost" className="!border-white/15 !text-white !text-sm">
               Merchant
             </AceButton>
           </div>
-        </div>
-        <ConnectionStatus connected={connected} lastSync={lastSync} error={loadError} onRetry={() => load()} />
+        </header>
+
+        <ConnectionStatus
+          connected={connected}
+          lastSync={lastSync}
+          error={loadError}
+          onRetry={() => load()}
+        />
         <ActionError message={actionError} />
+
         <AceSelect
-          className="mb-3 max-w-xs !bg-white/5 !text-white !border-white/20"
+          className="mb-3 max-w-xs"
           value={stationFilter}
           onChange={(e) => setStationFilter(e.target.value)}
+          aria-label="Filter station"
         >
           <option value="">Semua station</option>
           {stations.map((s) => (
@@ -136,44 +158,72 @@ export function KdsPage() {
             </option>
           ))}
         </AceSelect>
-        <div className="grid gap-3 md:grid-cols-4">
-          {COLUMNS.map((col) => (
-            <div key={col}>
-              <h2 className="mb-2 text-sm font-bold tracking-wide text-white/50">{statusLabel(col)}</h2>
-              <div className="space-y-2">
-                {tickets
-                  .filter((t) => t.status === col)
-                  .map((t) => (
-                    <GlareCard
+
+        <div className="-mx-1 flex flex-1 gap-3 overflow-x-auto px-1 pb-2">
+          {COLUMNS.map((col) => {
+            const colTickets = tickets.filter((t) => t.status === col);
+            return (
+              <section
+                key={col}
+                className="flex min-h-[50vh] w-[min(100%,240px)] shrink-0 flex-col sm:min-w-[220px] md:w-auto md:min-w-0 md:flex-1"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-white/50">
+                    {statusLabel(col)}
+                  </h2>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-bold tabular-nums">
+                    {colTickets.length}
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
+                  {colTickets.map((t) => (
+                    <article
                       key={t.id}
-                      className="w-full !border-white/10 !bg-white/5 !text-white"
+                      className={cn(
+                        'ops-panel border-l-4 p-3',
+                        COL_ACCENT[col],
+                      )}
                     >
-                      <div className="flex justify-between text-sm">
-                        <span className="font-bold">{t.order?.orderNumber || t.orderId?.slice(0, 6)}</span>
-                        <span className="text-white/50">{t.station?.name || '—'}</span>
+                      <div className="flex justify-between gap-2 text-sm">
+                        <span className="font-bold">
+                          {t.order?.orderNumber || t.orderId?.slice(0, 6)}
+                        </span>
+                        <span className="ops-muted text-xs">
+                          {t.station?.name || '-'}
+                        </span>
                       </div>
                       <ul className="mt-2 space-y-1 text-sm">
                         {(t.items || t.lines || []).map((i: any) => (
                           <li key={i.id || i.menuItemId}>
-                            {i.quantity || 1}× {i.name || i.menuItem?.name}
+                            <span className="font-bold text-[var(--ops-accent)]">
+                              {i.quantity || 1}x
+                            </span>{' '}
+                            {i.name || i.menuItem?.name}
                           </li>
                         ))}
                       </ul>
-                      <AceButton
-                        variant="accent"
-                        className="mt-3 w-full"
-                        disabled={!!busyId}
-                        onClick={() => advance(t.id, t.status as KitchenStatus)}
-                      >
-                        {busyId === t.id ? 'Memproses...' : `Tandai ${statusLabel(NEXT[t.status as KitchenStatus])}`}
-                      </AceButton>
-                    </GlareCard>
+                      {NEXT[t.status as KitchenStatus] && (
+                        <AceButton
+                          variant="accent"
+                          className="mt-3 w-full !text-sm"
+                          disabled={!!busyId}
+                          onClick={() => advance(t.id, t.status as KitchenStatus)}
+                        >
+                          {busyId === t.id
+                            ? 'Memproses...'
+                            : `Tandai ${statusLabel(NEXT[t.status as KitchenStatus])}`}
+                        </AceButton>
+                      )}
+                    </article>
                   ))}
-              </div>
-            </div>
-          ))}
+                  {!colTickets.length && (
+                    <div className="ops-empty py-8">Kosong</div>
+                  )}
+                </div>
+              </section>
+            );
+          })}
         </div>
-        <p className="mt-4 text-xs text-white/30">Tickets: {prevCount}</p>
       </div>
     </OpsShell>
   );

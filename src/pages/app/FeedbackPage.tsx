@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
+import { AceInput } from '@/components/ace/AceInput';
+import { EmptyState } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
+import { Loader } from '@/components/ui/loader';
 
 export function FeedbackPage() {
   const api = useApi();
@@ -41,13 +43,20 @@ export function FeedbackPage() {
   }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Feedback</h1>
-      {loading && <p className="mt-4 text-[var(--muted)]" role="status">Memuat feedback…</p>}
-      {error && <p className="mt-4 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="mt-6 space-y-3">
+    <div className="animate-float-up space-y-6">
+      <PageHeader title="Feedback" description="Ulasan tamu & balasan" />
+      {!organizationId && (
+        <EmptyState title="Pilih tenant dulu" description="Gunakan switcher organisasi di atas." />
+      )}
+      {loading && <Loader label="Memuat feedback…" />}
+      {error && (
+        <p className="text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="space-y-3">
         {rows.map((f) => (
-          <div key={f.id} className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm">
+          <div key={f.id} className="rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm">
             <div className="flex justify-between">
               <span className="font-bold">{f.overallRating}★</span>
               <span className="text-sm text-[var(--muted)]">{f.order?.orderNumber}</span>
@@ -58,21 +67,28 @@ export function FeedbackPage() {
                 Reply: {r.message}
               </p>
             ))}
-            <div className="mt-2 flex gap-2">
-              <input
-                className="input"
+            <div className="mt-2 flex flex-wrap gap-2">
+              <AceInput
+                containerClassName="min-w-0 flex-1"
                 placeholder="Balas…"
                 aria-label={`Balasan untuk feedback ${f.order?.orderNumber || f.id}`}
                 value={reply[f.id] || ''}
                 onChange={(e) => setReply({ ...reply, [f.id]: e.target.value })}
               />
-              <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white text-sm" disabled={busyId === f.id || !reply[f.id]?.trim()} onClick={() => respond(f.id)}>
+              <AceButton
+                variant="primary"
+                className="!text-sm"
+                disabled={busyId === f.id || !reply[f.id]?.trim()}
+                onClick={() => respond(f.id)}
+              >
                 {busyId === f.id ? 'Mengirim…' : 'Kirim'}
-              </button>
+              </AceButton>
             </div>
           </div>
         ))}
-        {!loading && !rows.length && !error && <EmptyState title="Belum ada feedback." />}
+        {!loading && !rows.length && !error && organizationId && (
+          <EmptyState title="Belum ada feedback" />
+        )}
       </div>
     </div>
   );

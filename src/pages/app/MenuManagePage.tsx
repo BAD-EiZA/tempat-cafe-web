@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
+import { AceInput, AceSelect } from '@/components/ace/AceInput';
+import { EmptyState } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
 import { formatIdr } from '../../lib/api';
@@ -147,178 +148,183 @@ export function MenuManagePage() {
   }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Menu</h1>
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" onClick={createMenu} disabled={!branchId || !!busy}>
-          {busy === 'menu' ? 'Membuat…' : '+ Menu'}
-        </button>
-      </div>
-      {err && <p role="alert" className="mt-2 text-sm text-[var(--danger)]">{err}</p>}
-      {!branchId && <p className="mt-4 text-[var(--muted)]">Pilih tenant di dashboard dulu.</p>}
+    <div className="animate-float-up space-y-6">
+      <PageHeader
+        title="Menu"
+        description="Kategori, item, dan modifier cabang"
+        actions={
+          <AceButton variant="primary" onClick={createMenu} disabled={!branchId || !!busy}>
+            {busy === 'menu' ? 'Membuat…' : 'Buat menu'}
+          </AceButton>
+        }
+      />
+      {err && (
+        <p role="alert" className="text-sm text-[var(--danger)]">
+          {err}
+        </p>
+      )}
+      {!branchId && (
+        <EmptyState title="Pilih tenant dulu" description="Gunakan switcher organisasi & cabang di atas." />
+      )}
       {loading && <Loader label="Memuat menu…" />}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addCategory}>
-          <h2 className="font-semibold">Kategori baru</h2>
-          <label className="label" htmlFor="category-menu">Menu</label>
-          <select
-            id="category-menu"
-            className="input"
-            value={catForm.menuId}
-            onChange={(e) => setCatForm({ ...catForm, menuId: e.target.value })}
-            required
-          >
-            <option value="">Pilih menu</option>
-            {menus.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <label className="label" htmlFor="category-name">Nama kategori</label>
-          <input
-            id="category-name"
-            className="input"
-            placeholder="Nama kategori"
-            value={catForm.name}
-            onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
-            required
-          />
-          <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!!busy}>
-            {busy === 'category' ? 'Menambah…' : 'Tambah kategori'}
-          </button>
-        </form>
+      {branchId && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <form className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm" onSubmit={addCategory}>
+              <h2 className="text-sm font-bold text-cafe-ink">Kategori baru</h2>
+              <AceSelect
+                label="Menu"
+                value={catForm.menuId}
+                onChange={(e) => setCatForm({ ...catForm, menuId: e.target.value })}
+                required
+              >
+                <option value="">Pilih menu</option>
+                {menus.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </AceSelect>
+              <AceInput
+                label="Nama kategori"
+                value={catForm.name}
+                onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+                required
+              />
+              <AceButton type="submit" variant="accent" disabled={!!busy}>
+                {busy === 'category' ? 'Menambah…' : 'Tambah kategori'}
+              </AceButton>
+            </form>
 
-        <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addItem}>
-          <h2 className="font-semibold">Item baru</h2>
-          <label className="label" htmlFor="item-category">Kategori</label>
-          <select
-            id="item-category"
-            className="input"
-            value={itemForm.categoryId}
-            onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
-            required
-          >
-            <option value="">Pilih kategori</option>
-            {menus.flatMap((m) =>
-              (m.categories || []).map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {m.name} / {c.name}
-                </option>
-              )),
-            )}
-          </select>
-          <label className="label" htmlFor="item-name">Nama item</label>
-          <input
-            id="item-name"
-            className="input"
-            placeholder="Nama item"
-            value={itemForm.name}
-            onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
-            required
-          />
-          <label className="label" htmlFor="item-price">Harga</label>
-          <input
-            id="item-price"
-            className="input"
-            type="number"
-            placeholder="Harga"
-            value={itemForm.basePrice || ''}
-            onChange={(e) => setItemForm({ ...itemForm, basePrice: Number(e.target.value) })}
-            required
-          />
-          <label className="label" htmlFor="item-description">Deskripsi</label>
-          <input
-            id="item-description"
-            className="input"
-            placeholder="Deskripsi"
-            value={itemForm.description}
-            onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-          />
-          <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a] disabled:opacity-50" type="submit" disabled={!!busy}>
-            {busy === 'item' ? 'Menambah…' : 'Tambah item'}
-          </button>
-        </form>
-      </div>
-
-      <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-4 max-w-xl space-y-2" onSubmit={addModifierGroup}>
-        <h2 className="font-semibold">Modifier group</h2>
-        <label className="label" htmlFor="modifier-name">Nama group</label>
-        <input
-          id="modifier-name"
-          className="input"
-          placeholder="Nama group (mis. Ukuran)"
-          value={modForm.name}
-          onChange={(e) => setModForm({ ...modForm, name: e.target.value })}
-          required
-        />
-        <label className="label" htmlFor="modifier-option">Opsi pertama</label>
-        <input
-          id="modifier-option"
-          className="input"
-          placeholder="Opsi pertama (mis. Large)"
-          value={modForm.optionName}
-          onChange={(e) => setModForm({ ...modForm, optionName: e.target.value })}
-        />
-        <label className="label" htmlFor="modifier-price">Price delta</label>
-        <input
-          id="modifier-price"
-          className="input"
-          type="number"
-          placeholder="Price delta"
-          value={modForm.priceDelta || ''}
-          onChange={(e) => setModForm({ ...modForm, priceDelta: Number(e.target.value) })}
-        />
-        <button className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold disabled:opacity-50" type="submit" disabled={!!busy}>
-          {busy === 'modifier' ? 'Membuat…' : 'Buat group + opsi'}
-        </button>
-        {modForm.groupId && (
-          <p className="text-xs text-[var(--muted)]">Group ID: {modForm.groupId} — klik Link di item</p>
-        )}
-      </form>
-
-      <div className="mt-8 space-y-6">
-        {!loading && menus.map((m) => (
-          <div key={m.id}>
-            <h2 className="text-lg font-semibold">{m.name}</h2>
-            {(m.categories || []).map((c: any) => (
-              <div key={c.id} className="mt-3">
-                <h3 className="text-sm font-bold text-[var(--muted)]">{c.name}</h3>
-                <div className="mt-2 space-y-2">
-                  {(c.items || []).map((item: any) => {
-                    const ov = item.branchItems?.find((b: any) => b.branchId === branchId);
-                    const sold = ov?.isSoldOut;
-                    return (
-                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm">
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-[var(--muted)]">{formatIdr(item.basePrice)}</div>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {modForm.groupId && (
-                            <button className="inline-flex items-center justify-center rounded-xl border border-[#d4d0c8] px-4 py-2.5 text-sm font-semibold disabled:opacity-50" disabled={!!busy} onClick={() => linkModifier(item.id)}>
-                              {busy === item.id ? 'Menyimpan…' : 'Link mod'}
-                            </button>
-                          )}
-                          <button
-                             className={`btn text-sm ${sold ? 'btn-accent' : 'btn-ghost'}`}
-                             disabled={!!busy}
-                            onClick={() => toggleSoldOut(item.id, !sold)}
-                          >
-                            {sold ? 'Habis' : 'Tersedia'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+            <form className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm" onSubmit={addItem}>
+              <h2 className="text-sm font-bold text-cafe-ink">Item baru</h2>
+              <AceSelect
+                label="Kategori"
+                value={itemForm.categoryId}
+                onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
+                required
+              >
+                <option value="">Pilih kategori</option>
+                {menus.flatMap((m) =>
+                  (m.categories || []).map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {m.name} / {c.name}
+                    </option>
+                  )),
+                )}
+              </AceSelect>
+              <AceInput
+                label="Nama item"
+                value={itemForm.name}
+                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                required
+              />
+              <AceInput
+                label="Harga"
+                type="number"
+                value={itemForm.basePrice || ''}
+                onChange={(e) => setItemForm({ ...itemForm, basePrice: Number(e.target.value) })}
+                required
+              />
+              <AceInput
+                label="Deskripsi"
+                value={itemForm.description}
+                onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+              />
+              <AceButton type="submit" variant="accent" disabled={!!busy}>
+                {busy === 'item' ? 'Menambah…' : 'Tambah item'}
+              </AceButton>
+            </form>
           </div>
-        ))}
-        {!loading && !err && branchId && !menus.length && <EmptyState title="Belum ada menu." description="Buat menu utama untuk mulai menambahkan kategori dan item." />}
-      </div>
+
+          <form className="max-w-xl space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm" onSubmit={addModifierGroup}>
+            <h2 className="text-sm font-bold text-cafe-ink">Modifier group</h2>
+            <AceInput
+              label="Nama group"
+              placeholder="mis. Ukuran"
+              value={modForm.name}
+              onChange={(e) => setModForm({ ...modForm, name: e.target.value })}
+              required
+            />
+            <AceInput
+              label="Opsi pertama"
+              placeholder="mis. Large"
+              value={modForm.optionName}
+              onChange={(e) => setModForm({ ...modForm, optionName: e.target.value })}
+            />
+            <AceInput
+              label="Selisih harga"
+              type="number"
+              value={modForm.priceDelta || ''}
+              onChange={(e) => setModForm({ ...modForm, priceDelta: Number(e.target.value) })}
+            />
+            <AceButton type="submit" variant="ghost" disabled={!!busy}>
+              {busy === 'modifier' ? 'Membuat…' : 'Buat group + opsi'}
+            </AceButton>
+            {modForm.groupId && (
+              <p className="text-xs text-cafe-muted">Group ID: {modForm.groupId} - klik Link di item</p>
+            )}
+          </form>
+
+          <div className="space-y-6">
+            {!loading &&
+              menus.map((m) => (
+                <div key={m.id}>
+                  <h2 className="text-lg font-semibold text-cafe-ink">{m.name}</h2>
+                  {(m.categories || []).map((c: any) => (
+                    <div key={c.id} className="mt-3">
+                      <h3 className="text-sm font-bold text-cafe-muted">{c.name}</h3>
+                      <ul className="mt-2 divide-y divide-cafe-border overflow-hidden rounded-2xl border border-cafe-border bg-cafe-card">
+                        {(c.items || []).map((item: any) => {
+                          const ov = item.branchItems?.find((b: any) => b.branchId === branchId);
+                          const sold = ov?.isSoldOut;
+                          return (
+                            <li
+                              key={item.id}
+                              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                            >
+                              <div>
+                                <div className="font-medium text-cafe-ink">{item.name}</div>
+                                <div className="text-sm text-cafe-muted">{formatIdr(item.basePrice)}</div>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {modForm.groupId && (
+                                  <AceButton
+                                    variant="ghost"
+                                    className="!text-sm"
+                                    disabled={!!busy}
+                                    onClick={() => linkModifier(item.id)}
+                                  >
+                                    {busy === item.id ? 'Menyimpan…' : 'Link mod'}
+                                  </AceButton>
+                                )}
+                                <AceButton
+                                  variant={sold ? 'accent' : 'ghost'}
+                                  className="!text-sm"
+                                  disabled={!!busy}
+                                  onClick={() => toggleSoldOut(item.id, !sold)}
+                                >
+                                  {sold ? 'Habis' : 'Tersedia'}
+                                </AceButton>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            {!loading && !err && branchId && !menus.length && (
+              <EmptyState
+                title="Belum ada menu"
+                description="Buat menu utama untuk mulai menambahkan kategori dan item."
+              />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

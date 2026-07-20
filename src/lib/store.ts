@@ -16,21 +16,24 @@ type AppState = {
   branchId: string | null;
   tableSessionId: string | null;
   tableId: string | null;
+  cafeSlug: string | null;
   cart: CartLine[];
   setTenant: (orgId: string, branchId: string) => void;
   setSession: (sessionId: string, tableId: string) => void;
+  setCafeSlug: (slug: string | null) => void;
   addToCart: (line: CartLine) => void;
   updateQty: (menuItemId: string, quantity: number) => void;
   clearCart: () => void;
   reset: () => void;
 };
 
-function lineId(line: CartLine) {
+export function lineId(line: CartLine) {
   const modifiers = (line.modifiers || [])
     .map((modifier) => modifier.modifierId)
     .sort()
     .join(',');
-  return `${line.menuItemId}:${modifiers}`;
+  const notes = (line.notes || '').trim();
+  return `${line.menuItemId}:${modifiers}:${notes}`;
 }
 
 export const useAppStore = create<AppState>()(
@@ -40,6 +43,7 @@ export const useAppStore = create<AppState>()(
       branchId: null,
       tableSessionId: null,
       tableId: null,
+      cafeSlug: null,
       cart: [],
       setTenant: (organizationId, branchId) =>
         set((state) => {
@@ -55,7 +59,28 @@ export const useAppStore = create<AppState>()(
           }
           return { organizationId, branchId };
         }),
-      setSession: (tableSessionId, tableId) => set({ tableSessionId, tableId }),
+      setSession: (tableSessionId, tableId) =>
+        set((state) => {
+          const tableChanged = state.tableId && state.tableId !== tableId;
+          const sessionChanged =
+            state.tableSessionId && state.tableSessionId !== tableSessionId;
+          if (tableChanged || sessionChanged) {
+            return { tableSessionId, tableId, cart: [] };
+          }
+          return { tableSessionId, tableId };
+        }),
+      setCafeSlug: (cafeSlug) =>
+        set((state) => {
+          if (state.cafeSlug && cafeSlug && state.cafeSlug !== cafeSlug) {
+            return {
+              cafeSlug,
+              cart: [],
+              tableSessionId: null,
+              tableId: null,
+            };
+          }
+          return { cafeSlug };
+        }),
       addToCart: (line) =>
         set((s) => {
           const id = line.lineId || lineId(line);
@@ -82,7 +107,14 @@ export const useAppStore = create<AppState>()(
       clearCart: () => set({ cart: [] }),
       reset: () => {
         localStorage.removeItem('pos_shift');
-        set({ organizationId: null, branchId: null, tableSessionId: null, tableId: null, cart: [] });
+        set({
+          organizationId: null,
+          branchId: null,
+          tableSessionId: null,
+          tableId: null,
+          cafeSlug: null,
+          cart: [],
+        });
       },
     }),
     { name: 'cafe-app' },

@@ -44,7 +44,7 @@ export function FlipWords({
   className?: string;
 }) {
   return (
-    <span className={cn('inline-block text-[#c4a574]', className)}>
+    <span className={cn('inline-block text-cafe-accent', className)}>
       <motion.span
         key={words[0]}
         initial={{ opacity: 0, y: 12 }}

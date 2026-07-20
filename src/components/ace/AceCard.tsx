@@ -25,7 +25,7 @@ export function AceCard({
     <div
       role={role}
       className={cn(
-        'rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm transition hover:border-[#c4a574]/40',
+        'rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm transition hover:border-cafe-forest-mid/40',
         className,
       )}
     >

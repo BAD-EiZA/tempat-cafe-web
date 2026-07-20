@@ -1,7 +1,24 @@
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
+import {
+  CashRegister,
+  CookingPot,
+  HandWaving,
+  House,
+} from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
-export type DockItem = { title: string; href: string };
+export type DockItem = {
+  title: string;
+  href: string;
+  icon?: 'pos' | 'kds' | 'waiter' | 'app';
+};
+
+const ICONS = {
+  pos: CashRegister,
+  kds: CookingPot,
+  waiter: HandWaving,
+  app: House,
+};
 
 export function FloatingDock({
   items,
@@ -11,22 +28,34 @@ export function FloatingDock({
   className?: string;
 }) {
   return (
-    <div
+    <nav
+      aria-label="Navigasi floor"
       className={cn(
-        'fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 bg-black/70 px-2 py-2 shadow-2xl backdrop-blur-md',
+        'fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-stretch gap-1 rounded-2xl border border-white/10 bg-[var(--ops-panel,#171d19)]/95 px-2 py-1.5 shadow-2xl backdrop-blur-md',
+        'pb-[max(0.375rem,env(safe-area-inset-bottom))]',
         className,
       )}
     >
-      {items.map((it) => (
-        <Link
-          key={it.href}
-          to={it.href}
-          className="rounded-xl px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
-          title={it.title}
-        >
-          {it.title}
-        </Link>
-      ))}
-    </div>
+      {items.map((it) => {
+        const Icon = it.icon ? ICONS[it.icon] : null;
+        return (
+          <NavLink
+            key={it.href}
+            to={it.href}
+            className={({ isActive }) =>
+              cn(
+                'flex min-h-11 min-w-[4.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1.5 text-[10px] font-semibold transition',
+                isActive
+                  ? 'bg-[var(--ops-forest,#2d6a4f)] text-[var(--ops-ink,#f4f1ea)]'
+                  : 'text-white/60 hover:bg-white/10 hover:text-white',
+              )
+            }
+          >
+            {Icon && <Icon weight="duotone" className="h-5 w-5" />}
+            <span>{it.title}</span>
+          </NavLink>
+        );
+      })}
+    </nav>
   );
 }

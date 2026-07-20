@@ -4,7 +4,9 @@ import { useAppStore } from '@/lib/store';
 import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
 import { EmptyState, AceBadge } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { formatIdr } from '@/lib/api';
+import { Loader } from '@/components/ui/loader';
 
 export function ReservationsManagePage() {
   const api = useApi();
@@ -54,27 +56,42 @@ export function ReservationsManagePage() {
     finally { setBusyId(''); }
   }
 
-  if (!branchId) return <p className="text-[#6b6b6b]">Pilih branch dulu.</p>;
+  if (!branchId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Reservasi" />
+        <EmptyState title="Pilih branch dulu" description="Gunakan switcher cabang di atas." />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Reservasi</h1>
-      {loading && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">Memuat reservasi…</p>}
-      {msg && <p className="mt-2 text-sm text-[#6b6b6b]" role="status">{msg}</p>}
-      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="mt-6 space-y-2">
+    <div className="animate-float-up space-y-6">
+      <PageHeader title="Reservasi" description="Konfirmasi, check-in, dan no-show" />
+      {loading && <Loader label="Memuat reservasi…" />}
+      {msg && (
+        <p className="text-sm text-cafe-muted" role="status">
+          {msg}
+        </p>
+      )}
+      {error && (
+        <p className="text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="space-y-2">
         {rows.map((r) => (
           <AceCard key={r.id} className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="font-medium">
                 {r.code} · {r.customerName}
               </div>
-              <div className="text-sm text-[#6b6b6b]">
+              <div className="text-sm text-cafe-muted">
                 {r.guestCount} tamu · {new Date(r.startAt).toLocaleString('id-ID')} ·{' '}
                 <AceBadge tone={r.status === 'CONFIRMED' ? 'ok' : 'default'}>{r.status}</AceBadge>
               </div>
               {(r.depositAmount > 0 || r.depositPaid) && (
-                <p className="mt-1 text-xs text-[#6b6b6b]">
+                <p className="mt-1 text-xs text-cafe-muted">
                   Deposit {formatIdr(r.depositAmount || 0)} · {r.depositPaid ? 'lunas' : 'belum'}
                 </p>
               )}

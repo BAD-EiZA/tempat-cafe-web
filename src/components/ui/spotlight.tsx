@@ -13,7 +13,7 @@ export function Spotlight({ className }: { className?: string }) {
         className="animate-spotlight absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full opacity-0"
         style={{
           background:
-            'radial-gradient(ellipse at center, rgba(196,165,116,0.35) 0%, transparent 70%)',
+            'radial-gradient(ellipse at center, color-mix(in srgb, var(--forest-mid) 35%, transparent) 0%, transparent 70%)',
         }}
       />
     </div>

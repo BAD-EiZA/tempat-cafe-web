@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { QrCode } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { PageShell } from '@/components/ace/PageShell';
@@ -27,25 +28,45 @@ export function QrEntryPage() {
         if (orgId && branchId) setTenant(orgId, branchId);
         if (sessionId && tableId) setSession(sessionId, tableId);
         const slug = res.brandSlug || res.branch?.brand?.slug || res.cafeSlug || 'demo-cafe';
-        navigate(`/c/${slug}/menu`, { replace: true });
+        const branchSlug = res.branchSlug || res.branch?.slug;
+        try {
+          sessionStorage.setItem('lastCafeSlug', slug);
+          if (branchSlug) sessionStorage.setItem('lastBranchSlug', branchSlug);
+          else sessionStorage.removeItem('lastBranchSlug');
+        } catch {
+          /* ignore */
+        }
+        const menuPath = branchSlug ? `/c/${slug}/${branchSlug}/menu` : `/c/${slug}/menu`;
+        navigate(menuPath, { replace: true });
       })
       .catch((e) => setErr(e.message || 'QR tidak valid'));
   }, [token, navigate, setTenant, setSession, retry]);
 
   return (
-    <PageShell beams spotlight maxWidth="max-w-md">
-      <AceCard className="mt-20 text-center" glare>
+    <PageShell beams={false} maxWidth="max-w-md">
+      <AceCard className="mt-20 text-center">
         {err ? (
           <div role="alert">
-            <h1 className="font-semibold">QR tidak dapat dibuka</h1>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-[var(--danger)]">
+              <QrCode weight="duotone" className="h-7 w-7" />
+            </div>
+            <h1 className="mt-4 font-semibold text-cafe-ink">QR tidak dapat dibuka</h1>
             <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
             <div className="mt-4 flex justify-center gap-2">
               <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
-              <AceButton as={Link} to="/" variant="ghost">Beranda</AceButton>
+              <AceButton as={Link} to="/" variant="ghost">
+                Beranda
+              </AceButton>
             </div>
           </div>
         ) : (
-          <Loader label="Membuka meja…" />
+          <div>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-cafe-forest text-cafe-card">
+              <QrCode weight="duotone" className="h-7 w-7" />
+            </div>
+            <p className="mt-4 text-sm font-medium text-cafe-ink">Membuka meja…</p>
+            <Loader className="!p-4" label="Menyiapkan sesi pesanan" />
+          </div>
         )}
       </AceCard>
     </PageShell>

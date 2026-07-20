@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { AceBadge, EmptyState, StatCard } from '@/components/ace/PageShell';
+import { AceInput, AceSelect } from '@/components/ace/AceInput';
+import { EmptyState } from '@/components/ace/PageShell';
+import { PageHeader } from '@/components/ace/PageHeader';
 import { useApi } from '../../hooks/useApi';
 import { useAppStore } from '../../lib/store';
+import { Loader } from '@/components/ui/loader';
 
 export function PrintersPage() {
   const api = useApi();
@@ -45,122 +47,168 @@ export function PrintersPage() {
 
   async function addPrinter(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError('');
-    try { await api('/printers', {
-      method: 'POST',
-      body: { branchId, name, connectionType: 'AGENT', type: 'KITCHEN' },
-    });
-      setName('Kitchen Printer'); await load();
-    } catch (e: any) { setError(e.message || 'Gagal menambah printer.'); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError('');
+    try {
+      await api('/printers', {
+        method: 'POST',
+        body: { branchId, name, connectionType: 'AGENT', type: 'KITCHEN' },
+      });
+      setName('Kitchen Printer');
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal menambah printer.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function registerAgent(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError('');
-    try { const res = await api<any>('/printers/agents/register', {
-      method: 'POST',
-      body: { branchId, name: agentName },
-    });
-      setToken(res.deviceToken || res.token || ''); await load();
-    } catch (e: any) { setError(e.message || 'Gagal mendaftarkan agent.'); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api<any>('/printers/agents/register', {
+        method: 'POST',
+        body: { branchId, name: agentName },
+      });
+      setToken(res.deviceToken || res.token || '');
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal mendaftarkan agent.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function mapStation(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError('');
-    try { await api('/printers/map-station', { method: 'POST', body: map }); await load(); }
-    catch (e: any) { setError(e.message || 'Gagal memetakan station.'); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError('');
+    try {
+      await api('/printers/map-station', { method: 'POST', body: map });
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Gagal memetakan station.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (!branchId) return <p className="text-[var(--muted)]">Pilih branch dulu.</p>;
+  if (!branchId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Printer & agent" />
+        <EmptyState title="Pilih branch dulu" description="Gunakan switcher cabang di atas." />
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-float-up" data-ace="1">
-      <h1 className="text-2xl font-bold">Printer & agent</h1>
-      {loading && <p className="mt-2 text-sm text-[var(--muted)]" role="status">Memuat…</p>}
-      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
+    <div className="animate-float-up space-y-6">
+      <PageHeader title="Printer & agent" description="Device, agent, dan mapping station" />
+      {loading && <Loader label="Memuat…" />}
+      {error && (
+        <p className="text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </p>
+      )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={addPrinter}>
-          <h2 className="font-semibold">Device</h2>
-          <input className="input" aria-label="Nama printer" value={name} onChange={(e) => setName(e.target.value)} required />
-          <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a]" type="submit" disabled={busy}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <form
+          className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm"
+          onSubmit={addPrinter}
+        >
+          <h2 className="text-sm font-bold text-cafe-ink">Device</h2>
+          <AceInput
+            label="Nama printer"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <AceButton type="submit" variant="accent" disabled={busy}>
             {busy ? 'Menyimpan…' : 'Tambah printer'}
-          </button>
-          <ul className="text-sm">
+          </AceButton>
+          <ul className="divide-y divide-cafe-border text-sm">
             {devices.map((d) => (
-              <li key={d.id}>
-                {d.name} · {d.id.slice(0, 8)}
+              <li key={d.id} className="flex justify-between gap-2 py-1.5">
+                <span className="font-medium text-cafe-ink">{d.name}</span>
+                <span className="font-mono text-xs text-cafe-muted">{d.id.slice(0, 8)}</span>
               </li>
             ))}
-            {!devices.length && <li className="text-[var(--muted)]">Belum ada printer</li>}
           </ul>
+          {!devices.length && <p className="text-sm text-cafe-muted">Belum ada printer</p>}
         </form>
 
-        <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm space-y-2" onSubmit={registerAgent}>
-          <h2 className="font-semibold">Print agent</h2>
-          <input
-            className="input"
-            aria-label="Nama print agent"
+        <form
+          className="space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm"
+          onSubmit={registerAgent}
+        >
+          <h2 className="text-sm font-bold text-cafe-ink">Print agent</h2>
+          <AceInput
+            label="Nama agent"
             value={agentName}
             onChange={(e) => setAgentName(e.target.value)}
             required
           />
-          <button className="inline-flex items-center justify-center rounded-xl bg-[#c4a574] px-4 py-2.5 text-sm font-semibold text-[#1a1a1a]" type="submit" disabled={busy}>
+          <AceButton type="submit" variant="accent" disabled={busy}>
             {busy ? 'Mendaftarkan…' : 'Register agent'}
-          </button>
+          </AceButton>
           {token && (
-            <p className="break-all text-xs" role="status">
-              Device token: <code>{token}</code>
+            <p className="break-all text-xs text-cafe-muted" role="status">
+              Device token: <code className="text-cafe-ink">{token}</code>
             </p>
           )}
-          <ul className="text-sm">
+          <ul className="divide-y divide-cafe-border text-sm">
             {agents.map((a) => (
-              <li key={a.id}>
-                {a.name} · {a.lastHeartbeat || a.lastSeenAt || '—'}
+              <li key={a.id} className="py-1.5">
+                <span className="font-medium text-cafe-ink">{a.name}</span>
+                <span className="ml-2 text-cafe-muted">
+                  · {a.lastHeartbeat || a.lastSeenAt || '-'}
+                </span>
               </li>
             ))}
           </ul>
-          {!loading && !agents.length && <p className="text-sm text-[var(--muted)]">Belum ada agent.</p>}
+          {!loading && !agents.length && (
+            <p className="text-sm text-cafe-muted">Belum ada agent.</p>
+          )}
         </form>
       </div>
 
-      <form className="rounded-2xl border border-[#e8e4de] bg-white p-4 shadow-sm mt-4 max-w-md space-y-2" onSubmit={mapStation}>
-        <h2 className="font-semibold">Map station → printer</h2>
-        <select
-          className="input"
-          aria-label="Printer"
+      <form
+        className="max-w-md space-y-3 rounded-2xl border border-cafe-border bg-cafe-card p-4 shadow-sm"
+        onSubmit={mapStation}
+      >
+        <h2 className="text-sm font-bold text-cafe-ink">Map station → printer</h2>
+        <AceSelect
+          label="Printer"
           value={map.printerId}
           onChange={(e) => setMap({ ...map, printerId: e.target.value })}
           required
         >
-          <option value="">Printer</option>
+          <option value="">Pilih printer</option>
           {devices.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
             </option>
           ))}
-        </select>
-        <select
-          className="input"
-          aria-label="Station"
+        </AceSelect>
+        <AceSelect
+          label="Station"
           value={map.stationId}
           onChange={(e) => setMap({ ...map, stationId: e.target.value })}
           required
         >
-          <option value="">Station</option>
+          <option value="">Pilih station</option>
           {stations.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name} ({s.code})
             </option>
           ))}
-        </select>
-        <button className="inline-flex items-center justify-center rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-semibold text-white" type="submit" disabled={busy}>
+        </AceSelect>
+        <AceButton type="submit" variant="primary" disabled={busy}>
           {busy ? 'Menyimpan…' : 'Map'}
-        </button>
+        </AceButton>
       </form>
     </div>
   );

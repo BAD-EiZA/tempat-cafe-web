@@ -1,17 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Coins, Receipt, ArrowRight } from '@phosphor-icons/react';
 import { useApi } from '@/hooks/useApi';
 import { useAuth } from '@/lib/auth';
 import { formatIdr } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
-import { PageShell, StatCard, EmptyState } from '@/components/ace/PageShell';
+import { PageShell, EmptyState } from '@/components/ace/PageShell';
 import { AceCard } from '@/components/ace/AceCard';
 import { AceButton } from '@/components/ace/AceButton';
-import { Timeline } from '@/components/ui/timeline';
-import { GlareCard } from '@/components/ui/glare-card';
+import { AceBadge } from '@/components/ace/PageShell';
 import { FloatingNavbar } from '@/components/ui/floating-navbar';
-import { MovingBorderButton } from '@/components/ui/moving-border';
 import { Loader } from '@/components/ui/loader';
+import { statusLabel } from '@/components/ace/OpsFeedback';
+
+function lastCafeSlug() {
+  try {
+    return sessionStorage.getItem('lastCafeSlug') || '';
+  } catch {
+    return '';
+  }
+}
+
+function statusTone(status?: string): 'default' | 'ok' | 'warn' | 'info' | 'danger' {
+  if (!status) return 'default';
+  if (status === 'CANCELLED') return 'danger';
+  if (status === 'AWAITING_PAYMENT') return 'warn';
+  if (['READY', 'SERVED', 'COMPLETED'].includes(status)) return 'ok';
+  if (['PREPARING', 'ACCEPTED', 'NEW'].includes(status)) return 'info';
+  return 'default';
+}
 
 export function MemberPage() {
   const api = useApi();
@@ -22,6 +39,7 @@ export function MemberPage() {
   const [lookup, setLookup] = useState<any>(null);
   const [loyaltyErr, setLoyaltyErr] = useState('');
   const [retry, setRetry] = useState(0);
+  const cafeSlug = lastCafeSlug();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -50,15 +68,23 @@ export function MemberPage() {
 
   if (!isAuthenticated) {
     return (
-      <PageShell beams spotlight maxWidth="max-w-md">
-        <AceCard className="mt-20 text-center" glare>
-          <h1 className="text-2xl font-bold">Member</h1>
-          <p className="mt-2 text-[#6b6b6b]">Login untuk lihat profil & loyalty.</p>
-          <MovingBorderButton className="mt-4" onClick={login}>
+      <PageShell beams={false} maxWidth="max-w-md">
+        <AceCard className="mt-20 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-cafe-forest text-cafe-card">
+            <Coins weight="duotone" className="h-6 w-6" />
+          </div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-cafe-ink">Member</h1>
+          <p className="mt-2 text-sm text-cafe-muted">
+            Login untuk lihat poin loyalty dan riwayat pesanan.
+          </p>
+          <AceButton variant="primary" className="mt-6 w-full" onClick={login}>
             Login
-          </MovingBorderButton>
+          </AceButton>
           <AceButton variant="ghost" className="mt-2 w-full" onClick={() => devLogin('owner')}>
             Dev login
+          </AceButton>
+          <AceButton as={Link} to="/" variant="ghost" className="mt-4 w-full !text-xs">
+            Beranda
           </AceButton>
         </AceCard>
       </PageShell>
@@ -67,7 +93,7 @@ export function MemberPage() {
 
   if (!profile && !err) {
     return (
-      <PageShell beams maxWidth="max-w-md">
+      <PageShell beams={false} maxWidth="max-w-md">
         <Loader className="pt-20" label="Memuat profil member…" />
       </PageShell>
     );
@@ -75,13 +101,15 @@ export function MemberPage() {
 
   if (err && !profile) {
     return (
-      <PageShell beams maxWidth="max-w-md">
+      <PageShell beams={false} maxWidth="max-w-md">
         <AceCard className="mt-20 text-center" role="alert">
-          <h1 className="font-semibold">Profil tidak dapat dimuat</h1>
+          <h1 className="font-semibold text-cafe-ink">Profil tidak dapat dimuat</h1>
           <p className="mt-2 text-sm text-[var(--danger)]">{err}</p>
           <div className="mt-4 flex justify-center gap-2">
             <AceButton onClick={() => setRetry((n) => n + 1)}>Coba lagi</AceButton>
-            <AceButton as={Link} to="/" variant="ghost">Beranda</AceButton>
+            <AceButton as={Link} to="/" variant="ghost">
+              Beranda
+            </AceButton>
           </div>
         </AceCard>
       </PageShell>
@@ -93,84 +121,135 @@ export function MemberPage() {
   const memberships = profile?.memberships || [];
   const balance = lookup?.balance ?? accounts[0]?.balance ?? 0;
   const perPt = lookup?.discountPerPoint ?? 0;
+  const displayName = profile?.name || user?.name || user?.email || 'Member';
 
   return (
-    <PageShell beams maxWidth="max-w-md" className="pb-10">
+    <PageShell beams={false} maxWidth="max-w-md" className="pb-10">
       <FloatingNavbar
         brand="Member"
-        navItems={[{ name: 'Beranda', link: '/' }]}
-        right={
-          <AceButton as={Link} to="/" variant="ghost" className="!py-1.5 !text-xs">
-            Home
-          </AceButton>
-        }
+        navItems={[
+          { name: 'Beranda', link: '/' },
+          ...(cafeSlug ? [{ name: 'Menu', link: `/c/${cafeSlug}/menu` }] : []),
+        ]}
       />
-      <div className="space-y-4 pt-20">
-        <GlareCard>
-          <p className="font-medium">{profile?.name || user?.name || user?.email}</p>
-          <p className="text-sm text-[#6b6b6b]">{profile?.email || user?.email}</p>
-          <p className="text-sm text-[#6b6b6b]">{profile?.phone}</p>
-        </GlareCard>
-        {err && <p role="alert" className="text-sm text-[var(--danger)]">{err}</p>}
+
+      <div className="space-y-5 pt-20">
+        <section className="rounded-2xl bg-cafe-forest px-5 py-6 text-cafe-card">
+          <p className="text-xs font-medium text-cafe-card/70">Halo</p>
+          <h1 className="mt-1 text-xl font-bold tracking-tight">{displayName}</h1>
+          <p className="mt-1 text-sm text-cafe-card/75">
+            {profile?.email || user?.email}
+            {profile?.phone ? ` · ${profile.phone}` : ''}
+          </p>
+
+          <div className="mt-5 rounded-xl bg-white/10 px-4 py-4 backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-xs font-medium text-cafe-card/70">
+              <Coins weight="duotone" className="h-4 w-4" />
+              Saldo poin
+            </div>
+            <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight">{balance}</p>
+            {perPt > 0 && (
+              <p className="mt-1 text-sm text-cafe-card/70">
+                ≈ {formatIdr(balance * perPt)} nilai tukar
+              </p>
+            )}
+          </div>
+        </section>
 
         {memberships.length > 0 && (
-          <AceCard>
-            <h2 className="font-semibold">Tier</h2>
+          <div className="flex flex-wrap gap-2">
             {memberships.map((m: any) => (
-              <p key={m.id} className="text-sm">
-                {m.tier?.name || m.tierId}
-              </p>
+              <AceBadge key={m.id} tone="ok">
+                {m.tier?.name || m.tierId || 'Member'}
+              </AceBadge>
             ))}
-          </AceCard>
-        )}
-
-        <StatCard
-          label="Poin"
-          value={
-            <span>
-              {balance}
-              {perPt > 0 && (
-                <span className="ml-2 text-sm font-normal text-[#6b6b6b]">
-                  ≈ {formatIdr(balance * perPt)}
-                </span>
-              )}
-            </span>
-          }
-        />
-        <p className="text-xs text-[#6b6b6b]">
-          Tukar poin saat checkout (nomor telepon sama dengan profil).
-        </p>
-        {loyaltyErr && <p role="status" className="text-xs text-[var(--danger)]">{loyaltyErr}</p>}
-
-        <div>
-          <h2 className="font-semibold">Riwayat pesanan</h2>
-          <div className="mt-2 space-y-2">
-            {orders.map((o: any) => (
-              <AceCard key={o.id} className="!p-0">
-                <Link className="block min-h-11 p-4 text-sm" to={`/order/${o.publicToken}`} aria-label={`Lihat pesanan ${o.orderNumber}`}>
-                  <div className="flex justify-between">
-                    <span className="font-medium">{o.orderNumber}</span>
-                    <span>{formatIdr(o.grandTotal)}</span>
-                  </div>
-                  <div className="text-[#6b6b6b]">{o.status}</div>
-                </Link>
-              </AceCard>
-            ))}
-            {!orders.length && <EmptyState title="Belum ada pesanan." />}
           </div>
-        </div>
+        )}
 
-        {orders.length > 0 && (
-          <AceCard>
-            <Timeline
-              items={orders.slice(0, 5).map((o: any) => ({
-                title: o.orderNumber,
-                description: `${o.status} · ${formatIdr(o.grandTotal)}`,
-                done: o.status === 'COMPLETED',
-              }))}
-            />
+        <p className="text-xs leading-relaxed text-cafe-muted">
+          Tukar poin saat checkout dengan nomor telepon yang sama di profil.
+        </p>
+
+        {!organizationId && (
+          <AceCard className="!border-cafe-accent/30 !bg-cafe-accent/10">
+            <p className="text-sm font-medium text-cafe-ink">Poin terikat ke kafe</p>
+            <p className="mt-1 text-xs text-cafe-muted">
+              Buka menu kafe dulu agar saldo poin cabang bisa dimuat.
+            </p>
+            <AceButton
+              as={Link}
+              to={cafeSlug ? `/c/${cafeSlug}/menu` : '/'}
+              variant="primary"
+              className="mt-3 !text-sm"
+            >
+              {cafeSlug ? 'Buka menu' : 'Ke beranda'}
+              <ArrowRight weight="bold" className="h-4 w-4" />
+            </AceButton>
           </AceCard>
         )}
+
+        {loyaltyErr && (
+          <p role="status" className="text-xs text-[var(--danger)]">
+            {loyaltyErr}
+          </p>
+        )}
+        {err && (
+          <p role="alert" className="text-sm text-[var(--danger)]">
+            {err}
+          </p>
+        )}
+
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Receipt weight="duotone" className="h-5 w-5 text-cafe-forest-mid" />
+            <h2 className="font-bold text-cafe-ink">Riwayat pesanan</h2>
+          </div>
+          <ul className="divide-y divide-cafe-border overflow-hidden rounded-2xl border border-cafe-border bg-cafe-card">
+            {orders.map((o: any) => {
+              const row = (
+                <>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-cafe-ink">{o.orderNumber}</div>
+                    <div className="mt-0.5">
+                      <AceBadge tone={statusTone(o.status)}>{statusLabel(o.status)}</AceBadge>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-semibold tabular-nums text-cafe-ink">
+                      {formatIdr(o.grandTotal)}
+                    </div>
+                    {o.publicToken && (
+                      <ArrowRight weight="bold" className="ml-auto mt-1 h-3.5 w-3.5 text-cafe-muted" />
+                    )}
+                  </div>
+                </>
+              );
+              return (
+                <li key={o.id}>
+                  {o.publicToken ? (
+                    <Link
+                      to={`/order/${o.publicToken}`}
+                      className="flex min-h-11 items-center justify-between gap-3 px-4 py-3 text-sm transition hover:bg-cafe-hover"
+                      aria-label={`Lihat pesanan ${o.orderNumber}`}
+                    >
+                      {row}
+                    </Link>
+                  ) : (
+                    <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3 text-sm">
+                      {row}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {!orders.length && (
+            <EmptyState
+              title="Belum ada pesanan"
+              description="Pesan lewat menu QR, lalu lacak di sini."
+            />
+          )}
+        </section>
       </div>
     </PageShell>
   );

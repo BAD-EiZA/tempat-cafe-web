@@ -20,20 +20,21 @@ export function MovingBorderButton({
   return (
     <Comp
       className={cn(
-        'relative inline-flex overflow-hidden rounded-xl p-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c4a574] focus-visible:ring-offset-2',
+        'relative inline-flex overflow-hidden rounded-xl p-[1px] focus:outline-none focus-visible:ring-2 focus-visible:ring-cafe-accent focus-visible:ring-offset-2',
         containerClassName,
       )}
       {...props}
     >
       <span
         className={cn(
-          'absolute inset-[-100%] animate-[border-spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#faf8f5_0%,#c4a574_50%,#1a1a1a_100%)]',
+          'absolute inset-[-100%] animate-[border-spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,var(--bg)_0%,var(--accent)_45%,var(--forest)_100%)]',
           borderClassName,
         )}
+        style={{ animationDuration: `${duration}ms` }}
       />
       <span
         className={cn(
-          'relative z-10 inline-flex w-full items-center justify-center gap-2 rounded-[11px] bg-[#1a1a1a] px-5 py-2.5 text-sm font-semibold text-white',
+          'relative z-10 inline-flex w-full items-center justify-center gap-2 rounded-[11px] bg-cafe-forest px-5 py-2.5 text-sm font-semibold text-cafe-card',
           className,
         )}
       >

@@ -14,7 +14,7 @@ export function AceTabs<T extends string>({
   return (
     <div
       className={cn(
-        'inline-flex flex-wrap gap-1 rounded-xl border border-[#e8e4de] bg-[#f3f0eb]/60 p-1',
+        'inline-flex flex-wrap gap-1 rounded-xl border border-cafe-border bg-cafe-hover/60 p-1',
         className,
       )}
     >
@@ -26,8 +26,8 @@ export function AceTabs<T extends string>({
           className={cn(
             'rounded-lg px-3 py-1.5 text-sm font-medium transition',
             value === t.id
-              ? 'bg-white text-[#1a1a1a] shadow-sm'
-              : 'text-[#6b6b6b] hover:text-[#1a1a1a]',
+              ? 'bg-cafe-card text-cafe-ink shadow-sm'
+              : 'text-cafe-muted hover:text-cafe-ink',
           )}
         >
           {t.label}
